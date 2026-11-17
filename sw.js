@@ -1,5 +1,5 @@
 // Service worker: permette all'app di aprirsi anche offline.
-const CACHE = "animeteca-v2";
+const CACHE = "animeteca-v3";
 const SHELL = [
   "./",
   "index.html",

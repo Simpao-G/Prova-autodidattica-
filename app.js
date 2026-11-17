@@ -118,13 +118,35 @@
     }
   }`;
 
+  // fetch con un tempo massimo: se il server non risponde non restiamo bloccati
+  const TIMEOUT_MS = 8000;
+  async function fetchWithTimeout(url, opts, signal, name) {
+    const ctrl = new AbortController();
+    const onAbort = () => ctrl.abort();
+    signal.addEventListener("abort", onAbort);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      ctrl.abort();
+    }, TIMEOUT_MS);
+    try {
+      return await fetch(url, { ...opts, signal: ctrl.signal });
+    } catch (err) {
+      if (timedOut) throw new Error(`${name} non risponde`);
+      if (signal.aborted) throw err;
+      throw new Error(`${name} bloccato o irraggiungibile`);
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+    }
+  }
+
   async function searchAniList(q, signal) {
-    const res = await fetch(ANILIST, {
+    const res = await fetchWithTimeout(ANILIST, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ query: ANILIST_QUERY, variables: { q } }),
-      signal,
-    });
+    }, signal, "AniList");
     if (!res.ok) throw new Error("AniList HTTP " + res.status);
     const json = await res.json();
     if (json.errors?.length) throw new Error("AniList: " + json.errors[0].message);
@@ -132,7 +154,8 @@
   }
 
   async function searchJikan(q, signal) {
-    const res = await fetch(`${API}/anime?q=${encodeURIComponent(q)}&limit=15&sfw=true&order_by=members&sort=desc`, { signal });
+    const res = await fetchWithTimeout(
+      `${API}/anime?q=${encodeURIComponent(q)}&limit=15&sfw=true&order_by=members&sort=desc`, {}, signal, "MyAnimeList");
     if (!res.ok) throw new Error("MyAnimeList HTTP " + res.status);
     const json = await res.json();
     return (json.data || []).map(fromJikan);
@@ -364,7 +387,7 @@
         renderResults(found.filter((r) => !seen.has(r.id) && seen.add(r.id)));
         return;
       } catch (err) {
-        if (err.name === "AbortError") return;
+        if (signal.aborted) return; // nuova ricerca partita nel frattempo
         errors.push(err.message || String(err));
       }
     }
