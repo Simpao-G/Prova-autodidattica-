@@ -276,6 +276,12 @@ img { display: block; }
 .s-eps .label + .label { margin-top: 2px; }
 .s-secondary { display: block; width: 100%; margin-top: 8px; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font-weight: 700; }
 .manual { margin: 10px 0 0; }
+.steps { margin: 4px 0 12px; padding-left: 20px; color: #d9d3f0; font-size: 14px; }
+.steps li { margin: 6px 0; }
+.bm-code {
+  display: block; width: 100%; margin-top: 8px; padding: 10px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--muted); font: 11px/1.35 ui-monospace, Menlo, monospace; resize: none; word-break: break-all;
+}
 .manual summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 14px; padding: 8px 0; }
 .manual[open] summary { margin-bottom: 6px; }
 

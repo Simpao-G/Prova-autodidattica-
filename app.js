@@ -722,6 +722,7 @@
 
   // Riquadro "tempo reale": sessioni del timer + eventuali aggiunte a mano
   let manualOpen = false; // la sezione "a mano" resta aperta dopo un inserimento
+  let bmOpen = false;
   function realSection() {
     const now = new Date();
     const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -734,7 +735,7 @@
       <div class="big-stat real"><div class="num">${esc(fmtTime(total))}</div><div class="cap">${
         real.length
           ? `${esc(fmtTime(sum(t0)))} oggi · ${esc(fmtTime(sum(t0 - 6 * 86400000)))} negli ultimi 7 giorni`
-          : "misurato con il timer ⏱"
+          : "misurato con il timer ⏱ o il segnalibro 🪐"
       }</div></div>
       ${
         session
@@ -743,9 +744,22 @@
       }
       ${recent
         .map(
-          (e) => `<div class="real-row"><span>${e.s === "timer" ? "⏱" : "✍️"} ${esc(day(e.t))}${e.title ? ` · ${esc(e.title)}` : ""}</span><b>${esc(fmtTime(e.m))}</b><button data-real-del="${e.t}" aria-label="Elimina">✕</button></div>`
+          (e) => `<div class="real-row"><span>${e.s === "timer" ? "⏱" : e.s === "saturn" ? "🪐" : "✍️"} ${esc(day(e.t))}${e.title ? ` · ${esc(e.title)}` : ""}</span><b>${esc(fmtTime(e.m))}</b><button data-real-del="${e.t}" aria-label="Elimina">✕</button></div>`
         )
         .join("")}
+      <details class="manual bm" ${bmOpen ? "open" : ""}>
+        <summary>🪐 Tempo automatico su AnimeSaturn</summary>
+        <ol class="steps">
+          <li>Tocca <b>Copia segnalibro</b> qui sotto.</li>
+          <li>In Brave salva nei segnalibri una pagina qualsiasi.</li>
+          <li>Apri i <b>Segnalibri</b>, tieni premuto quello nuovo e scegli <b>Modifica</b>: come nome scrivi <b>⏱ Anime</b>, nell'indirizzo cancella tutto e incolla.</li>
+          <li>Su AnimeSaturn, quando inizi un episodio, apri i Segnalibri e tocca <b>⏱ Anime</b>: in basso compare un contatore che va solo mentre la pagina è aperta davanti a te. Se cambi episodio, toccalo di nuovo (il tempo già contato resta).</li>
+          <li>Quando vuoi, tocca <b>Invia</b> sul contatore: si apre l'Animeteca con il tempo aggiornato.</li>
+        </ol>
+        <button type="button" class="real-add" id="copyBm">Copia segnalibro</button>
+        <textarea class="bm-code" id="bmCode" readonly rows="3">${esc(bookmarkletCode())}</textarea>
+        <p class="stats-note">Usa l'Animeteca in una scheda di Brave: se l'apri dall'icona sulla schermata Home, iPadOS le dà una memoria separata e il tempo inviato non arriva.</p>
+      </details>
       <details class="manual" ${manualOpen ? "open" : ""}>
         <summary>Aggiungi tempo a mano</summary>
         <form class="real-form" id="realForm">
@@ -856,11 +870,13 @@
   $("#stats").addEventListener(
     "toggle",
     (e) => {
-      if (e.target.classList?.contains("manual")) manualOpen = e.target.open;
+      if (e.target.classList?.contains("bm")) bmOpen = e.target.open;
+      else if (e.target.classList?.contains("manual")) manualOpen = e.target.open;
     },
     true
   );
   $("#stats").addEventListener("click", (e) => {
+    if (e.target.closest("#copyBm")) return copyBookmarklet();
     if (e.target.closest("#timerStats")) {
       if (session) openSessionSheet(false);
       else startSession(null);
@@ -880,6 +896,160 @@
     renderStats();
     openSheet("#statsSheet");
   });
+
+  // ---------- Segnalibro per AnimeSaturn ----------
+  // ATTENZIONE: dentro questa funzione niente commenti "//" e sempre il ";" (il codice viene compresso).
+  // Questa funzione NON gira nell'app: diventa il codice del segnalibro e gira sulla
+  // pagina di AnimeSaturn. Conta i secondi mentre la pagina è visibile, li salva nella
+  // memoria del sito (giorno per giorno) e con "Invia" li manda all'Animeteca.
+  function saturnBookmarklet(APP) {
+    if (window.__animeteca) {
+      window.__animeteca.flash();
+      return;
+    }
+    var host = location.hostname;
+    if (host.indexOf("animesaturn") < 0 && !confirm("Questa pagina non sembra AnimeSaturn. Vuoi contare il tempo lo stesso?")) return;
+    var K = "animeteca_tempo";
+    var pad = function (n) {
+      return String(n).padStart(2, "0");
+    };
+    var today = function () {
+      var d = new Date();
+      return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+    };
+    var read = function () {
+      try {
+        return JSON.parse(localStorage.getItem(K)) || {};
+      } catch (e) {
+        return {};
+      }
+    };
+    var write = function (o) {
+      try {
+        localStorage.setItem(K, JSON.stringify(o));
+      } catch (e) {}
+    };
+    var fmt = function (s) {
+      var h = Math.floor(s / 3600);
+      var m = Math.floor((s - h * 3600) / 60);
+      return h + ":" + pad(m) + ":" + pad(Math.floor(s - h * 3600 - m * 60));
+    };
+    var box = document.createElement("div");
+    var root = box.attachShadow ? box.attachShadow({ mode: "open" }) : box;
+    root.innerHTML =
+      "<style>" +
+      ".b{position:fixed;left:12px;bottom:12px;z-index:2147483647;display:flex;align-items:center;gap:8px;" +
+      "padding:8px 8px 8px 12px;border-radius:16px;background:rgb(36,31,58);color:rgb(243,240,255);" +
+      "border:1px solid rgb(74,222,128);box-shadow:0 8px 24px rgba(0,0,0,.5);" +
+      "font:600 14px -apple-system,BlinkMacSystemFont,system-ui,sans-serif}" +
+      ".d{width:9px;height:9px;border-radius:50px;background:rgb(74,222,128)}" +
+      "button{border:0;border-radius:11px;padding:7px 11px;font:700 13px -apple-system,system-ui,sans-serif;cursor:pointer}" +
+      ".s{background:rgb(74,222,128);color:rgb(16,37,26)}.x{background:rgba(255,255,255,.12);color:rgb(243,240,255)}" +
+      "</style><div class=b><span class=d></span><span class=t></span>" +
+      "<button class=s>Invia</button><button class=x>✕</button></div>";
+    (document.body || document.documentElement).appendChild(box);
+    var bar = root.querySelector(".b");
+    var label = root.querySelector(".t");
+    var dot = root.querySelector(".d");
+    var last = Date.now();
+    var tick = function () {
+      var now = Date.now();
+      var dt = Math.min(now - last, 5000);
+      last = now;
+      var o = read();
+      var k = today();
+      if (document.visibilityState === "visible") {
+        o[k] = (o[k] || 0) + dt / 1000;
+        write(o);
+        dot.style.opacity = "1";
+      } else {
+        dot.style.opacity = "0.3";
+      }
+      label.textContent = "⏱ AnimeSaturn · oggi " + fmt(o[k] || 0);
+    };
+    var timer = setInterval(tick, 1000);
+    tick();
+    root.querySelector(".s").onclick = function () {
+      var o = read();
+      var d = {};
+      Object.keys(o).forEach(function (k) {
+        if (o[k] >= 30) d[k] = Math.round(o[k]);
+      });
+      var url = APP + "?saturn=" + encodeURIComponent(JSON.stringify({ h: host, d: d }));
+      var w = window.open(url, "_blank");
+      if (!w) location.href = url;
+    };
+    root.querySelector(".x").onclick = function () {
+      clearInterval(timer);
+      box.remove();
+      window.__animeteca = null;
+    };
+    window.__animeteca = {
+      flash: function () {
+        bar.style.transform = "scale(1.08)";
+        setTimeout(function () {
+          bar.style.transform = "";
+        }, 250);
+      },
+    };
+  }
+
+  function bookmarkletCode() {
+    const app = location.origin + location.pathname.replace(/index\.html$/, "");
+    // spazi compressi per un codice più corto (la funzione usa sempre il ";" e non ha commenti "//")
+    const src = saturnBookmarklet.toString().replace(/\s+/g, " ");
+    return "javascript:" + encodeURIComponent("(" + src + ")(" + JSON.stringify(app) + ");void 0");
+  }
+
+  function copyBookmarklet() {
+    const code = bookmarkletCode();
+    const fallback = () => {
+      const ta = $("#bmCode");
+      ta.focus();
+      ta.select();
+      ta.setSelectionRange(0, code.length);
+      let ok = false;
+      try {
+        ok = document.execCommand("copy");
+      } catch {
+        /* nessuna copia automatica */
+      }
+      toast(ok ? "Segnalibro copiato!" : "Seleziona il testo qui sotto e copialo");
+    };
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(code).then(() => toast("Segnalibro copiato!"), fallback);
+    else fallback();
+  }
+
+  // L'Animeteca aperta dal pulsante "Invia" del segnalibro: ?saturn={h: sito, d: {giorno: secondi}}
+  function importSaturn() {
+    const raw = new URLSearchParams(location.search).get("saturn");
+    if (!raw) return;
+    history.replaceState(null, "", location.pathname);
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return toast("Dati di AnimeSaturn non validi");
+    }
+    const host = String(data?.h || "animesaturn").slice(0, 80);
+    let days = 0;
+    let todayMin = 0;
+    for (const [day, sec] of Object.entries(data?.d || {})) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+      const m = Math.round(Number(sec) / 60);
+      if (!(m > 0) || m > 1440) continue;
+      const [y, mo, d] = day.split("-").map(Number);
+      // Il segnalibro manda sempre il totale del giorno: sostituisce, non somma
+      real = real.filter((x) => !(x.s === "saturn" && x.day === day && x.host === host));
+      real.push({ t: new Date(y, mo - 1, d, 12).getTime(), m, s: "saturn", day, host, title: "AnimeSaturn" });
+      days++;
+      if (day === localDate()) todayMin = m;
+    }
+    saveReal();
+    toast(days ? `🪐 AnimeSaturn aggiornato · oggi ${fmtTime(todayMin)}` : "Nessun tempo da importare (serve almeno 1 minuto)");
+    renderStats();
+    openSheet("#statsSheet");
+  }
 
   // ---------- Timer di visione ----------
   // L'app non può vedere cosa succede nelle altre schede di Brave, ma sa quando la lasci
@@ -1114,6 +1284,7 @@
   renderAll();
   renderTimer();
   if (!document.hidden) onShow();
+  importSaturn();
 
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
     navigator.serviceWorker.register("sw.js").catch(() => {});

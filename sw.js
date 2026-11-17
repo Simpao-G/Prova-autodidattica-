@@ -1,5 +1,5 @@
 // Service worker: permette all'app di aprirsi anche offline.
-const CACHE = "animeteca-v7";
+const CACHE = "animeteca-v8";
 const SHELL = [
   "./",
   "index.html",
@@ -51,7 +51,7 @@ self.addEventListener("fetch", (e) => {
       fetch(req)
         .then((res) => {
           const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy));
+          if (!url.search) caches.open(CACHE).then((c) => c.put(req, copy));
           return res;
         })
         .catch(() => caches.match(req).then((r) => r || caches.match("index.html")))
