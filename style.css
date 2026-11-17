@@ -243,10 +243,41 @@ img { display: block; }
   width: 100%; min-width: 0; padding: 10px; border-radius: 10px; border: 1px solid var(--line);
   background: var(--bg); color: var(--text); font-size: 16px; font-family: inherit;
 }
-.real-add { grid-column: 1 / -1; padding: 12px; border: 0; border-radius: 12px; font-weight: 700; color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.real-add { display: block; width: 100%; grid-column: 1 / -1; padding: 12px; border: 0; border-radius: 12px; font-weight: 700; color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
 .real-row { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 1px solid var(--line); font-size: 14px; }
 .real-row span { flex: 1; color: var(--muted); }
 .real-row button { border: 0; background: none; color: var(--muted); padding: 4px 8px; font-size: 14px; }
+
+/* --- Timer di visione --- */
+.timer-btn {
+  display: block; width: 100%; margin: 0 0 14px; padding: 13px 14px; border-radius: 14px;
+  border: 1px dashed var(--accent); background: rgba(255,92,154,.08); color: var(--text); font-weight: 700; font-size: 15px;
+}
+.timer-btn.on { border-style: solid; background: rgba(74,222,128,.12); border-color: var(--green); }
+.timer-bar {
+  position: fixed; left: 16px; right: 96px; bottom: calc(28px + var(--safe-bottom)); z-index: 6;
+  display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px; border-radius: 18px;
+  background: rgba(36,31,58,.95); border: 1px solid var(--green); box-shadow: 0 10px 30px rgba(0,0,0,.45);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); max-width: 520px;
+}
+.timer-bar[hidden] { display: none; }
+.t-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); flex: none; animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; transform: scale(.8); } }
+.t-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.t-text b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-text span { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timer-bar button { flex: none; border: 0; border-radius: 12px; padding: 9px 14px; font-weight: 700; background: var(--green); color: #10251a; }
+.session-panel { padding-bottom: calc(28px + var(--safe-bottom)); }
+.s-title { margin: 4px 0 6px; font-size: 22px; }
+.s-lead { margin: 0 0 12px; color: #d9d3f0; }
+.s-warn { margin: 0 0 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255,212,92,.12); color: var(--yellow); font-size: 14px; }
+.s-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+.s-field input { padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font-size: 18px; font-weight: 700; font-family: inherit; }
+.s-eps .label + .label { margin-top: 2px; }
+.s-secondary { display: block; width: 100%; margin-top: 8px; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font-weight: 700; }
+.manual { margin: 10px 0 0; }
+.manual summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 14px; padding: 8px 0; }
+.manual[open] summary { margin-bottom: 6px; }
 
 /* --- Stagioni --- */
 .section-title { margin: 26px 0 2px; font-size: 18px; }

@@ -32,6 +32,8 @@
 
   <main id="grid" class="grid" aria-live="polite"></main>
 
+  <div class="timer-bar" id="timerBar" role="status" hidden></div>
+
   <button class="fab" id="addBtn" aria-label="Aggiungi anime">＋</button>
 
   <!-- Ricerca -->
@@ -63,6 +65,15 @@
     </div>
   </section>
 
+  <!-- Riepilogo del timer -->
+  <section class="sheet" id="sessionSheet" aria-hidden="true">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-panel session-panel">
+      <div class="sheet-handle"></div>
+      <div id="sessionBody"></div>
+    </div>
+  </section>
+
   <!-- Menu -->
   <section class="sheet" id="menuSheet" aria-hidden="true">
     <div class="sheet-backdrop" data-close></div>
@@ -72,7 +83,7 @@
       <label class="menu-item">⬆️ Importa backup<input type="file" id="importInput" accept="application/json" hidden></label>
       <p class="menu-note">I dati restano salvati solo su questo dispositivo. Fai ogni tanto un backup.</p>
       <p class="menu-note" id="dbInfo"></p>
-      <p class="menu-note">Versione 6</p>
+      <p class="menu-note">Versione 7</p>
     </div>
   </section>
 

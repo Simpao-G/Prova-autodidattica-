@@ -23,6 +23,14 @@ tutti gli anime da [AniList](https://anilist.co) con `scripts/build-db.mjs`:
 
 Se il database non c'è ancora, l'app cerca online su AniList e MyAnimeList.
 
+Con il pulsante **📊** vedi le **statistiche**: tempo passato sugli anime, episodi visti, oggi /
+settimana / mese, grafico degli ultimi 7 giorni e generi preferiti.
+
+**Timer di visione** (funziona anche con Brave): nella scheda di un anime premi **⏱ Inizia a guardare**,
+poi passa alla scheda dove guardi l'episodio. L'app conta il tempo in cui sei fuori e, quando torni,
+ti chiede quanto hai guardato e quanti episodi segnare. Le uscite sotto il minuto non contano; se
+resti via più di 3 ore ti avvisa che forse hai dimenticato il timer acceso.
+
 È una **PWA** (Progressive Web App): si installa sulla schermata Home e si apre a schermo intero come
 un'app normale, anche offline. I dati restano salvati sul telefono; dal menu **⋯** puoi esportare e
 importare un backup.
