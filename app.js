@@ -758,6 +758,7 @@
         </ol>
         <button type="button" class="real-add" id="copyBm">Copia segnalibro</button>
         <textarea class="bm-code" id="bmCode" readonly rows="3">${esc(bookmarkletCode())}</textarea>
+        <button type="button" class="link-btn" id="copyBmLong">Brave non salva il segnalibro? Prova la versione lunga</button>
         <p class="stats-note">Usa l'Animeteca in una scheda di Brave: se l'apri dall'icona sulla schermata Home, iPadOS le dà una memoria separata e il tempo inviato non arriva.</p>
       </details>
       <details class="manual" ${manualOpen ? "open" : ""}>
@@ -876,7 +877,8 @@
     true
   );
   $("#stats").addEventListener("click", (e) => {
-    if (e.target.closest("#copyBm")) return copyBookmarklet();
+    if (e.target.closest("#copyBm")) return copyBookmarklet(false);
+    if (e.target.closest("#copyBmLong")) return copyBookmarklet(true);
     if (e.target.closest("#timerStats")) {
       if (session) openSessionSheet(false);
       else startSession(null);
@@ -898,113 +900,29 @@
   });
 
   // ---------- Segnalibro per AnimeSaturn ----------
-  // ATTENZIONE: dentro questa funzione niente commenti "//" e sempre il ";" (il codice viene compresso).
-  // Questa funzione NON gira nell'app: diventa il codice del segnalibro e gira sulla
-  // pagina di AnimeSaturn. Conta i secondi mentre la pagina è visibile, li salva nella
-  // memoria del sito (giorno per giorno) e con "Invia" li manda all'Animeteca.
-  function saturnBookmarklet(APP) {
-    if (window.__animeteca) {
-      window.__animeteca.flash();
-      return;
-    }
-    var host = location.hostname;
-    if (host.indexOf("animesaturn") < 0 && !confirm("Questa pagina non sembra AnimeSaturn. Vuoi contare il tempo lo stesso?")) return;
-    var K = "animeteca_tempo";
-    var pad = function (n) {
-      return String(n).padStart(2, "0");
-    };
-    var today = function () {
-      var d = new Date();
-      return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
-    };
-    var read = function () {
-      try {
-        return JSON.parse(localStorage.getItem(K)) || {};
-      } catch (e) {
-        return {};
-      }
-    };
-    var write = function (o) {
-      try {
-        localStorage.setItem(K, JSON.stringify(o));
-      } catch (e) {}
-    };
-    var fmt = function (s) {
-      var h = Math.floor(s / 3600);
-      var m = Math.floor((s - h * 3600) / 60);
-      return h + ":" + pad(m) + ":" + pad(Math.floor(s - h * 3600 - m * 60));
-    };
-    var box = document.createElement("div");
-    var root = box.attachShadow ? box.attachShadow({ mode: "open" }) : box;
-    root.innerHTML =
-      "<style>" +
-      ".b{position:fixed;left:12px;bottom:12px;z-index:2147483647;display:flex;align-items:center;gap:8px;" +
-      "padding:8px 8px 8px 12px;border-radius:16px;background:rgb(36,31,58);color:rgb(243,240,255);" +
-      "border:1px solid rgb(74,222,128);box-shadow:0 8px 24px rgba(0,0,0,.5);" +
-      "font:600 14px -apple-system,BlinkMacSystemFont,system-ui,sans-serif}" +
-      ".d{width:9px;height:9px;border-radius:50px;background:rgb(74,222,128)}" +
-      "button{border:0;border-radius:11px;padding:7px 11px;font:700 13px -apple-system,system-ui,sans-serif;cursor:pointer}" +
-      ".s{background:rgb(74,222,128);color:rgb(16,37,26)}.x{background:rgba(255,255,255,.12);color:rgb(243,240,255)}" +
-      "</style><div class=b><span class=d></span><span class=t></span>" +
-      "<button class=s>Invia</button><button class=x>✕</button></div>";
-    (document.body || document.documentElement).appendChild(box);
-    var bar = root.querySelector(".b");
-    var label = root.querySelector(".t");
-    var dot = root.querySelector(".d");
-    var last = Date.now();
-    var tick = function () {
-      var now = Date.now();
-      var dt = Math.min(now - last, 5000);
-      last = now;
-      var o = read();
-      var k = today();
-      if (document.visibilityState === "visible") {
-        o[k] = (o[k] || 0) + dt / 1000;
-        write(o);
-        dot.style.opacity = "1";
-      } else {
-        dot.style.opacity = "0.3";
-      }
-      label.textContent = "⏱ AnimeSaturn · oggi " + fmt(o[k] || 0);
-    };
-    var timer = setInterval(tick, 1000);
-    tick();
-    root.querySelector(".s").onclick = function () {
-      var o = read();
-      var d = {};
-      Object.keys(o).forEach(function (k) {
-        if (o[k] >= 30) d[k] = Math.round(o[k]);
-      });
-      var url = APP + "?saturn=" + encodeURIComponent(JSON.stringify({ h: host, d: d }));
-      var w = window.open(url, "_blank");
-      if (!w) location.href = url;
-    };
-    root.querySelector(".x").onclick = function () {
-      clearInterval(timer);
-      box.remove();
-      window.__animeteca = null;
-    };
-    window.__animeteca = {
-      flash: function () {
-        bar.style.transform = "scale(1.08)";
-        setTimeout(function () {
-          bar.style.transform = "";
-        }, 250);
-      },
-    };
-  }
+  // Il cronometro vero è in saturn.js. Il segnalibro "corto" lo carica dal sito
+  // (Brave per iPad non salva segnalibri troppo lunghi); quello "lungo" lo contiene tutto.
+  const appUrl = () => location.origin + location.pathname.replace(/index\.html$/, "");
 
   function bookmarkletCode() {
-    const app = location.origin + location.pathname.replace(/index\.html$/, "");
-    // spazi compressi per un codice più corto (la funzione usa sempre il ";" e non ha commenti "//")
-    const src = saturnBookmarklet.toString().replace(/\s+/g, " ");
-    return "javascript:" + encodeURIComponent("(" + src + ")(" + JSON.stringify(app) + ");void 0");
+    const code =
+      "(function(){var s=document.createElement('script');s.src='" + appUrl() + "saturn.js?v='+Date.now();" +
+      "(document.body||document.documentElement).appendChild(s);})()";
+    return "javascript:" + encodeURIComponent(code);
   }
 
-  function copyBookmarklet() {
-    const code = bookmarkletCode();
+  function longBookmarkletCode() {
+    if (!window.saturnBookmarklet) return "";
+    // spazi compressi per un codice più corto (la funzione usa sempre il ";" e non ha commenti "//")
+    const src = window.saturnBookmarklet.toString().replace(/\s+/g, " ");
+    return "javascript:" + encodeURIComponent("(" + src + ")(" + JSON.stringify(appUrl()) + ");void 0");
+  }
+
+  function copyBookmarklet(long) {
+    const code = long ? longBookmarkletCode() : bookmarkletCode();
     const fallback = () => {
       const ta = $("#bmCode");
+      ta.value = code;
       ta.focus();
       ta.select();
       ta.setSelectionRange(0, code.length);
@@ -1016,7 +934,8 @@
       }
       toast(ok ? "Segnalibro copiato!" : "Seleziona il testo qui sotto e copialo");
     };
-    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(code).then(() => toast("Segnalibro copiato!"), fallback);
+    const done = () => toast(long ? "Versione lunga copiata!" : "Segnalibro copiato!");
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(code).then(done, fallback);
     else fallback();
   }
 
