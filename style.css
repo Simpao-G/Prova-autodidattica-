@@ -206,6 +206,23 @@ img { display: block; }
 .status-btn[data-status="done"].active { background: var(--green); }
 .remove-btn { display: block; margin: 8px auto 0; border: 0; background: none; color: #ff7b7b; font-size: 14px; padding: 8px; }
 
+/* --- Stagioni --- */
+.section-title { margin: 26px 0 2px; font-size: 18px; }
+.season-sum { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+.seasons { display: flex; flex-direction: column; gap: 8px; }
+.season {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 8px; border: 1px solid var(--line); border-radius: 14px; background: var(--card);
+}
+.season img { width: 44px; height: 62px; object-fit: cover; border-radius: 8px; flex: none; background: var(--bg); }
+.season .s-text { min-width: 0; flex: 1; }
+.season .s-title { font-weight: 700; font-size: 14px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.season .s-sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
+.season .s-tag { flex: none; font-size: 12px; font-weight: 700; color: var(--yellow); padding-right: 4px; }
+.season .s-tag.ok { color: var(--green); }
+.season.current { border-color: var(--yellow); cursor: default; }
+.season:disabled { opacity: 1; color: inherit; }
+
 /* --- Menu --- */
 .menu-panel { padding-bottom: calc(30px + var(--safe-bottom)); }
 .menu-item {

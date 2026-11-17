@@ -1,6 +1,7 @@
 /* Animeteca - lista personale degli anime.
- * Dati salvati nel dispositivo (localStorage).
- * Ricerca anime tramite l'API pubblica Jikan (dati di MyAnimeList).
+ * La tua lista è salvata nel dispositivo (localStorage).
+ * La ricerca usa il database in data/ (costruito da GitHub Actions con i dati di AniList);
+ * se non è disponibile, cerca online su AniList e MyAnimeList.
  */
 (() => {
   "use strict";
@@ -47,6 +48,116 @@
     return "data:image/svg+xml," + encodeURIComponent(svg);
   }
   const cover = (a) => a.image || placeholder(a.title);
+
+  // Se una copertina non si carica, mostra quella generata
+  document.addEventListener(
+    "error",
+    (e) => {
+      const img = e.target;
+      if (img.tagName === "IMG" && !img.src.startsWith("data:")) img.src = placeholder(img.dataset.t);
+    },
+    true
+  );
+
+  // ---------- Database locale ----------
+  const norm = (s) =>
+    String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+
+  let db = null;
+  let dbPromise = null;
+  const shardCache = new Map();
+
+  function loadDB() {
+    if (!dbPromise) {
+      dbPromise = fetch("data/anime.json")
+        .then((r) => {
+          if (!r.ok) throw new Error("database non trovato");
+          return r.json();
+        })
+        .then((json) => {
+          const P = json.coverPrefix || "";
+          const items = json.items.map(([al, mal, title, alt, type, year, eps, img, score, pop, isSeason]) => ({
+            id: mal ? "mal-" + mal : "al-" + al,
+            alId: al,
+            malId: mal || null,
+            title,
+            altTitle: alt,
+            type,
+            year: year || null,
+            episodes: eps || null,
+            image: img ? (img.startsWith("http") ? img : P + img) : "",
+            score: score ? (score / 10).toFixed(1) : null,
+            isSeason: !!isSeason,
+            url: mal ? `https://myanimelist.net/anime/${mal}` : `https://anilist.co/anime/${al}`,
+            _nt: norm(title),
+            _na: norm(alt),
+          }));
+          db = {
+            items,
+            byAl: new Map(items.map((i) => [i.alId, i])),
+            byId: new Map(items.map((i) => [i.id, i])),
+            shards: json.shards || 64,
+            updated: json.updated,
+          };
+          return db;
+        })
+        .catch((err) => {
+          dbPromise = null;
+          throw err;
+        });
+    }
+    return dbPromise;
+  }
+
+  function localSearch(q) {
+    const nq = norm(q);
+    if (!nq) return [];
+    const words = nq.split(" ");
+    const hits = [];
+    for (const it of db.items) {
+      const t = it._nt;
+      const a = it._na;
+      const k = t + " " + a;
+      let s;
+      if (t === nq || a === nq) s = 5;
+      else if (t.startsWith(nq) || a.startsWith(nq)) s = 4;
+      else if ((" " + k).includes(" " + nq)) s = 3;
+      else if (k.includes(nq)) s = 2;
+      else if (words.length > 1 && words.every((w) => k.includes(w))) s = 1;
+      else continue;
+      hits.push([s, it]);
+    }
+    // gli anime sono già ordinati per popolarità: l'ordinamento stabile la mantiene
+    return hits.sort((x, y) => y[0] - x[0]).slice(0, 40).map((h) => h[1]);
+  }
+
+  // Descrizione, generi e stagioni: caricati solo quando apri la scheda
+  async function loadDetails(item) {
+    if (!db) await loadDB().catch(() => {});
+    if (!db) return;
+    if (!item.alId) {
+      const match = db.byId.get(item.id);
+      if (!match) return;
+      item.alId = match.alId;
+    }
+    if (item.seasons && item.synopsis !== undefined) return;
+    const n = item.alId % db.shards;
+    if (!shardCache.has(n)) {
+      shardCache.set(
+        n,
+        fetch(`data/d/${n}.json`).then((r) => (r.ok ? r.json() : {})).catch(() => {
+          shardCache.delete(n);
+          return {};
+        })
+      );
+    }
+    const d = (await shardCache.get(n))[item.alId];
+    if (!d) return;
+    if (!item.synopsis) item.synopsis = d[0];
+    if (!item.genres?.length) item.genres = d[1];
+    item.seasons = d[2];
+    if (findItem(item.id) === item) save();
+  }
 
   let toastTimer;
   function toast(msg) {
@@ -166,7 +277,8 @@
     let item = findItem(anime.id);
     const isNew = !item;
     if (isNew) {
-      item = { ...anime, ep: 0, addedAt: Date.now() };
+      const clean = Object.fromEntries(Object.entries(anime).filter(([k]) => !k.startsWith("_")));
+      item = { ...clean, ep: 0, addedAt: Date.now() };
       list.unshift(item);
     }
     item.status = status;
@@ -239,7 +351,7 @@
         }
         const bar = a.status === "watching" && a.episodes ? `<div class="progress"><i style="width:${pct(a)}%"></i></div>` : "";
         return `<button class="card" data-open="${esc(a.id)}">
-          <img class="cover" src="${esc(cover(a))}" alt="" loading="lazy">
+          <img class="cover" src="${esc(cover(a))}" data-t="${esc(a.title)}" alt="" loading="lazy">
           ${corner}
           <div class="info"><div class="title">${esc(a.title)}</div><div class="sub">${esc(sub)}</div>${bar}</div>
         </button>`;
@@ -277,13 +389,45 @@
         </div>`
       : "";
 
-    const synopsis = item.synopsis || "Nessuna descrizione disponibile.";
+    const loading = item.synopsis === undefined && item.alId;
+    const synopsis = item.synopsis || (loading ? "Caricamento descrizione…" : "Nessuna descrizione disponibile.");
     const long = synopsis.length > 280;
+    const wiki = item.url
+      ? `<a class="wiki-link" href="${esc(item.url)}" target="_blank" rel="noopener">Apri su ${item.url.includes("anilist") ? "AniList" : "MyAnimeList"} ↗</a>`
+      : "";
+
+    // Stagioni e film della stessa serie
+    let seasonsHtml = "";
+    const chain = db && item.seasons?.length > 1 ? item.seasons.map((al) => db.byAl.get(al)).filter(Boolean) : [];
+    if (chain.length > 1) {
+      const mainSeasons = chain.filter((s) => s.isSeason);
+      const totalEps = mainSeasons.reduce((n, s) => n + (s.episodes || 0), 0);
+      const summary = [
+        mainSeasons.length && `${mainSeasons.length} ${mainSeasons.length === 1 ? "stagione" : "stagioni"}`,
+        totalEps && `${totalEps} episodi`,
+        chain.length > mainSeasons.length && `${chain.length - mainSeasons.length} tra film e speciali`,
+      ].filter(Boolean).join(" · ");
+      let n = 0;
+      const rows = chain
+        .map((s) => {
+          const label = s.isSeason ? `Stagione ${++n}` : s.type || "Extra";
+          const here = s.alId === item.alId;
+          const mine = findItem(s.id);
+          const sub = [label, s.year, s.episodes && `${s.episodes} ep.`].filter(Boolean).join(" · ");
+          return `<button class="season ${here ? "current" : ""}" data-season="${s.alId}" ${here ? "disabled" : ""}>
+            <img src="${esc(cover(s))}" data-t="${esc(s.title)}" alt="" loading="lazy">
+            <div class="s-text"><div class="s-title">${esc(s.title)}</div><div class="s-sub">${esc(sub)}</div></div>
+            ${here ? `<span class="s-tag">Questa</span>` : mine ? `<span class="s-tag ok">✓ ${esc(STATUS[mine.status])}</span>` : ""}
+          </button>`;
+        })
+        .join("");
+      seasonsHtml = `<h3 class="section-title">Stagioni e film</h3><p class="season-sum">${esc(summary)}</p><div class="seasons">${rows}</div>`;
+    }
 
     $("#detail").innerHTML = `
       <div class="hero">
-        <img class="bg" src="${esc(cover(item))}" alt="">
-        <img class="poster" src="${esc(cover(item))}" alt="Copertina di ${esc(item.title)}">
+        <img class="bg" src="${esc(cover(item))}" data-t="${esc(item.title)}" alt="">
+        <img class="poster" src="${esc(cover(item))}" data-t="${esc(item.title)}" alt="Copertina di ${esc(item.title)}">
         <button class="close" data-close aria-label="Chiudi">✕</button>
       </div>
       <div class="detail-body">
@@ -293,21 +437,26 @@
         ${episodes}
         <p class="synopsis ${long ? "clamp" : ""}" id="synopsis">${esc(synopsis)}</p>
         ${long ? `<button class="more" id="moreBtn">Leggi tutto</button><br>` : ""}
-        ${item.url ? `<a class="wiki-link" href="${esc(item.url)}" target="_blank" rel="noopener">Apri su MyAnimeList ↗</a>` : ""}
+        ${wiki}
         <div class="status-row">
           ${Object.entries(STATUS)
             .map(([key, label]) => `<button class="status-btn ${status === key ? "active" : ""}" data-status="${key}">${label}</button>`)
             .join("")}
         </div>
+        ${seasonsHtml}
         ${saved ? `<button class="remove-btn" id="removeBtn">Rimuovi dalla lista</button>` : ""}
       </div>`;
   }
 
   function showDetail(anime) {
-    openItem = findItem(anime.id) || anime;
+    const item = findItem(anime.id) || anime;
+    openItem = item;
     renderDetail();
     $("#detail").scrollTop = 0;
     openSheet("#detailSheet");
+    loadDetails(item).then(() => {
+      if (openItem === item) renderDetail();
+    });
   }
 
   function renderAll() {
@@ -356,7 +505,7 @@
           const saved = findItem(r.id);
           const sub = [r.type, r.year, r.episodes && `${r.episodes} ep.`].filter(Boolean).join(" · ");
           return `<button class="result" data-result="${i}">
-            <img src="${esc(cover(r))}" alt="" loading="lazy">
+            <img src="${esc(cover(r))}" data-t="${esc(r.title)}" alt="" loading="lazy">
             <div><div class="r-title">${esc(r.title)}</div><div class="r-sub">${esc(sub)}</div></div>
             ${saved ? `<span class="r-tag">✓ ${esc(STATUS[saved.status])}</span>` : ""}
           </button>`;
@@ -372,11 +521,25 @@
       box.innerHTML = `<p class="status-msg">Scrivi il nome di un anime, per esempio “Frieren” o “One Piece”.</p>`;
       return;
     }
-    box.innerHTML = `<div class="spinner"></div>`;
     searchCtrl = new AbortController();
     const signal = searchCtrl.signal;
+
+    // 1) Database dentro l'app: veloce e funziona anche offline
+    if (!db) box.innerHTML = `<div class="spinner"></div>`;
+    try {
+      await loadDB();
+    } catch {
+      /* database non disponibile: si cerca online */
+    }
+    if (signal.aborted) return;
+    if (db) {
+      const local = localSearch(q);
+      if (local.length) return renderResults(local);
+    }
+
+    // 2) Ricerca online: prima AniList, se non risponde (o non trova nulla) MyAnimeList
+    box.innerHTML = `<div class="spinner"></div>`;
     const errors = [];
-    // Prima AniList, se non risponde (o non trova nulla) prova MyAnimeList
     for (const source of [searchAniList, searchJikan]) {
       try {
         const found = await source(q, signal);
@@ -391,7 +554,7 @@
         errors.push(err.message || String(err));
       }
     }
-    if (errors.length < 2) return renderResults([]);
+    if (errors.length < 2 || db) return renderResults([]);
     const offline = !navigator.onLine;
     box.innerHTML = `<p class="status-msg">${
       offline ? "Sei offline: collegati a internet per cercare." : "Ricerca non disponibile in questo momento. Riprova tra poco."
@@ -434,6 +597,7 @@
 
   $("#addBtn").addEventListener("click", () => {
     openSheet("#searchSheet");
+    loadDB().catch(() => {});
     const input = $("#searchInput");
     if (!input.value) search("");
     setTimeout(() => input.focus(), 300);
@@ -467,6 +631,12 @@
   $("#detail").addEventListener("click", (e) => {
     const st = e.target.closest("[data-status]");
     if (st) return setStatus(openItem, st.dataset.status);
+    const season = e.target.closest("[data-season]");
+    if (season && db) {
+      const s = db.byAl.get(+season.dataset.season);
+      if (s) showDetail(s);
+      return;
+    }
     const ep = e.target.closest("[data-ep]");
     if (ep) {
       const item = findItem(openItem.id);
@@ -482,7 +652,19 @@
   });
 
   // ---------- Backup ----------
-  $("#menuBtn").addEventListener("click", () => openSheet("#menuSheet"));
+  $("#menuBtn").addEventListener("click", () => {
+    openSheet("#menuSheet");
+    const info = $("#dbInfo");
+    info.textContent = "Database anime: caricamento…";
+    loadDB()
+      .then((d) => {
+        const when = d.updated ? new Date(d.updated).toLocaleDateString("it-IT") : "?";
+        info.textContent = `Database anime: ${d.items.length.toLocaleString("it-IT")} titoli, aggiornato il ${when}`;
+      })
+      .catch(() => {
+        info.textContent = "Database anime non ancora disponibile: la ricerca usa internet.";
+      });
+  });
 
   $("#exportBtn").addEventListener("click", () => {
     const blob = new Blob([JSON.stringify({ app: "animeteca", version: 1, list }, null, 2)], { type: "application/json" });

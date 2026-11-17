@@ -6,8 +6,22 @@ App per il telefono per tenere traccia dei tuoi anime:
 - **Da vedere**: la tua lista dei desideri
 - **Guardati**: gli anime finiti (quando arrivi all'ultimo episodio ci finiscono da soli)
 
-Cerchi un anime per nome e l'app prende **copertina, titolo, descrizione, episodi, anno, voto e generi**
-da MyAnimeList (tramite l'API gratuita [Jikan](https://jikan.moe)). Se un anime non si trova lo puoi aggiungere a mano.
+Cerchi un anime per nome e l'app mostra **copertina, titolo, descrizione, episodi, anno, voto, generi**
+e l'elenco di **stagioni e film** della serie. Se un anime non si trova lo puoi aggiungere a mano.
+
+## Da dove arrivano gli anime
+
+Il database è **dentro l'app** (cartella `data/`), così la ricerca è istantanea, funziona offline e
+non può essere bloccata da browser o reti lente.
+
+Lo costruisce in automatico **GitHub Actions** (`.github/workflows/update-db.yml`), che scarica
+tutti gli anime da [AniList](https://anilist.co) con `scripts/build-db.mjs`:
+
+- parte da solo quando lo script cambia e **ogni lunedì**, per aggiungere gli anime nuovi;
+- puoi avviarlo anche a mano: tab **Actions** → *Aggiorna database anime* → **Run workflow**;
+- ci mette circa 15–20 minuti.
+
+Se il database non c'è ancora, l'app cerca online su AniList e MyAnimeList.
 
 È una **PWA** (Progressive Web App): si installa sulla schermata Home e si apre a schermo intero come
 un'app normale, anche offline. I dati restano salvati sul telefono; dal menu **⋯** puoi esportare e
@@ -41,6 +55,8 @@ e apri <http://localhost:8000>.
 |---|---|
 | `index.html` | struttura della pagina |
 | `style.css` | grafica |
-| `app.js` | logica: lista, ricerca, episodi, backup |
+| `app.js` | logica: lista, ricerca, episodi, stagioni, backup |
+| `data/` | database degli anime (generato in automatico, non modificarlo a mano) |
+| `scripts/build-db.mjs` | script che crea il database da AniList |
 | `sw.js` | service worker per funzionare offline |
 | `manifest.webmanifest`, `icons/` | nome e icona dell'app installata |
