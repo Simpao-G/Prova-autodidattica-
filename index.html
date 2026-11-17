@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Animeteca</title>
+  <meta name="description" content="Tieni traccia degli anime da vedere, in corso e guardati.">
+  <meta name="theme-color" content="#14111f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Animeteca">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1 class="logo">Anime<span>teca</span></h1>
+    <button class="icon-btn" id="menuBtn" aria-label="Menu">⋯</button>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="watching" class="tab active">In corso <b data-count="watching">0</b></button>
+    <button role="tab" data-tab="plan" class="tab">Da vedere <b data-count="plan">0</b></button>
+    <button role="tab" data-tab="done" class="tab">Guardati <b data-count="done">0</b></button>
+  </nav>
+
+  <main id="grid" class="grid" aria-live="polite"></main>
+
+  <button class="fab" id="addBtn" aria-label="Aggiungi anime">＋</button>
+
+  <!-- Ricerca -->
+  <section class="sheet" id="searchSheet" aria-hidden="true">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-panel">
+      <div class="sheet-handle"></div>
+      <div class="search-bar">
+        <input id="searchInput" type="search" placeholder="Cerca un anime…" autocomplete="off" enterkeyhint="search">
+        <button class="text-btn" data-close>Chiudi</button>
+      </div>
+      <div id="searchResults" class="results"></div>
+    </div>
+  </section>
+
+  <!-- Scheda anime (la "finestra" del disegno) -->
+  <section class="sheet" id="detailSheet" aria-hidden="true">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-panel detail-panel" id="detail"></div>
+  </section>
+
+  <!-- Menu -->
+  <section class="sheet" id="menuSheet" aria-hidden="true">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-panel menu-panel">
+      <div class="sheet-handle"></div>
+      <button class="menu-item" id="exportBtn">⬇️ Esporta backup</button>
+      <label class="menu-item">⬆️ Importa backup<input type="file" id="importInput" accept="application/json" hidden></label>
+      <p class="menu-note">I dati restano salvati solo su questo dispositivo. Fai ogni tanto un backup.</p>
+    </div>
+  </section>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
