@@ -18,9 +18,11 @@ const MAX_ITEMS = Number(process.env.MAX_ITEMS ?? Infinity); // solo per prove
 const TYPE = { TV: "TV", TV_SHORT: "TV", ONA: "ONA", MOVIE: "Film", OVA: "OVA", SPECIAL: "Special" };
 const SEASON_TYPES = new Set(["TV", "TV_SHORT", "ONA"]);
 
-const QUERY = `query ($after: Int, $perPage: Int) {
-  Page(perPage: $perPage) {
-    media(type: ANIME, isAdult: false, id_greater: $after, sort: ID) {
+// AniList limita ogni ricerca a ~5000 risultati: scarichiamo un anno di uscita alla volta
+const QUERY = `query ($page: Int, $perPage: Int, $from: FuzzyDateInt, $to: FuzzyDateInt) {
+  Page(page: $page, perPage: $perPage) {
+    pageInfo { hasNextPage }
+    media(type: ANIME, isAdult: false, startDate_greater: $from, startDate_lesser: $to, sort: ID) {
       id idMal
       title { romaji english }
       coverImage { large }
@@ -34,14 +36,14 @@ const QUERY = `query ($after: Int, $perPage: Int) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function request(after, perPage) {
+async function request(variables) {
   for (let attempt = 1; ; attempt++) {
     let res;
     try {
       res = await fetch(API, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ query: QUERY, variables: { after, perPage } }),
+        body: JSON.stringify({ query: QUERY, variables }),
       });
     } catch (err) {
       if (attempt >= 8) throw err;
@@ -58,9 +60,9 @@ async function request(after, perPage) {
       continue;
     }
     const json = await res.json().catch(() => null);
-    if (res.ok && json?.data) return json.data.Page.media;
+    if (res.ok && json?.data) return json.data.Page;
     const msg = json?.errors?.[0]?.message || `HTTP ${res.status}`;
-    if (/complex/i.test(msg) && perPage > 10) return request(after, Math.floor(perPage / 2));
+    if (/complex/i.test(msg)) throw Object.assign(new Error(msg), { complex: true });
     if (attempt >= 8 || (res.status >= 400 && res.status < 500)) throw new Error(msg);
     console.warn(`${msg}, riprovo…`);
     await sleep(5000 * attempt);
@@ -156,17 +158,41 @@ export function build(all) {
   };
 }
 
-async function main() {
-  const all = [];
-  let after = 0;
-  for (let page = 1; all.length < MAX_ITEMS; page++) {
-    const media = await request(after, 50);
-    if (!media.length) break;
-    for (const m of media) if (m.format !== "MUSIC" && (m.title?.english || m.title?.romaji)) all.push(m);
-    after = media[media.length - 1].id;
-    if (page % 20 === 0) console.log(`pagina ${page}: ${all.length} anime (ultimo id ${after})`);
-    await sleep(PAUSE_MS);
+// Tutti gli anime usciti in un anno (date incomplete comprese, es. 2023-00-00)
+async function fetchYear(year) {
+  for (let perPage = 50; ; perPage = Math.floor(perPage / 2)) {
+    const found = [];
+    try {
+      for (let page = 1; ; page++) {
+        const data = await request({ page, perPage, from: (year - 1) * 10000 + 1231, to: year * 10000 + 1232 });
+        found.push(...data.media);
+        if (!data.pageInfo.hasNextPage) return found;
+        if (page >= 99) {
+          console.warn(`anno ${year}: raggiunto il limite di AniList, alcuni anime potrebbero mancare`);
+          return found;
+        }
+        await sleep(PAUSE_MS);
+      }
+    } catch (err) {
+      // richiesta troppo "pesante": riprova con pagine più piccole
+      if (!err.complex || perPage <= 10) throw err;
+      console.warn(`${err.message} - riprovo con pagine da ${Math.floor(perPage / 2)}`);
+    }
   }
+}
+
+async function main() {
+  const byId = new Map();
+  const firstYear = Number(process.env.FIRST_YEAR ?? 1940);
+  const lastYear = Number(process.env.LAST_YEAR ?? new Date().getFullYear() + 2);
+  for (let year = lastYear; year >= firstYear; year--) {
+    const media = await fetchYear(year);
+    for (const m of media) if (m.format !== "MUSIC" && (m.title?.english || m.title?.romaji)) byId.set(m.id, m);
+    if (media.length) console.log(`${year}: ${media.length} anime (totale ${byId.size})`);
+    await sleep(PAUSE_MS);
+    if (byId.size >= MAX_ITEMS) break;
+  }
+  const all = [...byId.values()];
   if (all.length < (MAX_ITEMS === Infinity ? 5000 : 1)) throw new Error(`Troppo pochi anime (${all.length}): non aggiorno il database`);
 
   const { index, shards } = build(all);
