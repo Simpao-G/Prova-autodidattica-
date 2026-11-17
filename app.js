@@ -9,6 +9,7 @@
   const API = "https://api.jikan.moe/v4";
   const ANILIST = "https://graphql.anilist.co";
   const STORAGE_KEY = "animeteca.v1";
+  const LOG_KEY = "animeteca.log.v1";
   const STATUS = {
     watching: "In corso",
     plan: "Da vedere",
@@ -36,6 +37,25 @@
     }
   }
   const findItem = (id) => list.find((a) => a.id === id);
+
+  // Registro degli episodi segnati (data + quanti): serve per le statistiche
+  let log = loadLog();
+  function loadLog() {
+    try {
+      const d = JSON.parse(localStorage.getItem(LOG_KEY));
+      return Array.isArray(d) ? d : [];
+    } catch {
+      return [];
+    }
+  }
+  function saveLog() {
+    if (log.length > 5000) log = log.slice(-5000);
+    try {
+      localStorage.setItem(LOG_KEY, JSON.stringify(log));
+    } catch {
+      /* statistiche non salvate, non è grave */
+    }
+  }
 
   // ---------- Utilità ----------
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -76,7 +96,7 @@
         })
         .then((json) => {
           const P = json.coverPrefix || "";
-          const items = json.items.map(([al, mal, title, alt, type, year, eps, img, score, pop, isSeason]) => ({
+          const items = json.items.map(([al, mal, title, alt, type, year, eps, img, score, pop, isSeason, dur]) => ({
             id: mal ? "mal-" + mal : "al-" + al,
             alId: al,
             malId: mal || null,
@@ -88,6 +108,7 @@
             image: img ? (img.startsWith("http") ? img : P + img) : "",
             score: score ? (score / 10).toFixed(1) : null,
             isSeason: !!isSeason,
+            duration: dur || null,
             url: mal ? `https://myanimelist.net/anime/${mal}` : `https://anilist.co/anime/${al}`,
             _nt: norm(title),
             _na: norm(alt),
@@ -185,6 +206,7 @@
       image: r.images?.webp?.large_image_url || r.images?.jpg?.large_image_url || "",
       synopsis: (r.synopsis || "").replace(/\s*\[Written by MAL Rewrite\]\s*$/i, "").trim(),
       episodes: r.episodes || null,
+      duration: parseInt(r.duration, 10) || null,
       year: r.year || r.aired?.prop?.from?.year || null,
       score: r.score || null,
       type: r.type || "",
@@ -211,6 +233,7 @@
       image: m.coverImage?.extraLarge || m.coverImage?.large || "",
       synopsis: cleanText(m.description),
       episodes: m.episodes || null,
+      duration: m.duration || null,
       year: m.seasonYear || m.startDate?.year || null,
       score: m.averageScore ? (m.averageScore / 10).toFixed(1) : null,
       type: FORMATS[m.format] || m.format || "",
@@ -223,7 +246,7 @@
     Page(perPage: 15) {
       media(search: $q, type: ANIME, isAdult: false, sort: [SEARCH_MATCH, POPULARITY_DESC]) {
         id idMal title { romaji english native } coverImage { extraLarge large }
-        description(asHtml: false) episodes seasonYear startDate { year }
+        description(asHtml: false) episodes duration seasonYear startDate { year }
         averageScore format genres siteUrl
       }
     }
@@ -272,6 +295,15 @@
     return (json.data || []).map(fromJikan);
   }
 
+  // Durata di un episodio in minuti (se non è nota, una stima in base al tipo)
+  const DEFAULT_MIN = { TV: 24, ONA: 20, OVA: 30, Film: 100, Special: 24 };
+  function durationOf(item) {
+    if (item.duration) return item.duration;
+    const fromDb = db?.byId.get(item.id)?.duration;
+    if (fromDb) return fromDb;
+    return DEFAULT_MIN[item.type] || 24;
+  }
+
   // ---------- Azioni ----------
   function setStatus(anime, status) {
     let item = findItem(anime.id);
@@ -294,6 +326,8 @@
     const max = item.episodes || Infinity;
     const ep = Math.max(0, Math.min(max, n));
     if (ep === item.ep) return;
+    log.push({ t: Date.now(), id: item.id, d: ep - item.ep, m: durationOf(item) });
+    saveLog();
     item.ep = ep;
     if (ep > 0 && item.status === "plan") item.status = "watching";
     if (item.episodes && ep === item.episodes && item.status !== "done") {
@@ -651,6 +685,101 @@
     if (e.target.closest("#removeBtn")) removeItem(findItem(openItem.id));
   });
 
+  // ---------- Statistiche ----------
+  const fmtTime = (min) => {
+    min = Math.round(min);
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return h ? `${h} h${m ? " " + m + " min" : ""}` : `${m} min`;
+  };
+
+  function renderStats() {
+    const box = $("#stats");
+    // Totale: episodi segnati x durata (conta anche quello che avevi già segnato prima)
+    let totalMin = 0;
+    let totalEps = 0;
+    const genreEps = new Map();
+    for (const a of list) {
+      if (!a.ep) continue;
+      totalEps += a.ep;
+      totalMin += a.ep * durationOf(a);
+      for (const g of a.genres || []) genreEps.set(g, (genreEps.get(g) || 0) + a.ep);
+    }
+    const done = list.filter((a) => a.status === "done").length;
+
+    // Periodi: dal registro degli episodi segnati
+    const dayStart = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const today = new Date();
+    const t0 = dayStart(today);
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+      days.push({ start: d.getTime(), label: d.toLocaleDateString("it-IT", { weekday: "short" }).replace(".", ""), min: 0, isToday: i === 0 });
+    }
+    let monthMin = 0;
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).getTime();
+    for (const e of log) {
+      const min = (e.d || 0) * (e.m || 0);
+      if (e.t >= monthStart) monthMin += min;
+      const day = days.find((x) => e.t >= x.start && e.t < x.start + 86400000);
+      if (day) day.min += min;
+    }
+    days.forEach((d) => (d.min = Math.max(0, d.min)));
+    const weekMin = days.reduce((n, d) => n + d.min, 0);
+    const todayMin = days[6].min;
+    const maxDay = Math.max(1, ...days.map((d) => d.min));
+
+    if (!totalEps) {
+      box.innerHTML = `<div class="empty"><div class="big">📊</div><p><strong>Ancora niente da mostrare.</strong></p><p>Segna gli episodi che guardi e qui vedrai quanto tempo ci passi.</p></div>`;
+      return;
+    }
+
+    const hours = totalMin / 60;
+    const dd = Math.floor(hours / 24);
+    const big =
+      hours >= 24
+        ? `${dd}<small> ${dd === 1 ? "giorno" : "giorni"}</small> ${Math.floor(hours % 24)}<small> ${Math.floor(hours % 24) === 1 ? "ora" : "ore"}</small>`
+        : `${Math.floor(hours)}<small> ore</small> ${Math.round(totalMin % 60)}<small> min</small>`;
+    const cap = hours >= 24 ? `${Math.round(hours)} ore in totale, a guardare anime` : "il tempo passato davanti agli anime";
+
+    const topGenres = [...genreEps.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const maxG = topGenres[0]?.[1] || 1;
+
+    box.innerHTML = `
+      <div class="big-stat"><div class="num">${big}</div><div class="cap">${esc(cap)}</div></div>
+      <div class="stat-grid">
+        <div class="stat-box"><b>${totalEps}</b><span>episodi visti</span></div>
+        <div class="stat-box"><b>${done}</b><span>anime finiti</span></div>
+        <div class="stat-box"><b>${list.filter((a) => a.status === "watching").length}</b><span>in corso</span></div>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-box"><b>${fmtTime(todayMin)}</b><span>oggi</span></div>
+        <div class="stat-box"><b>${fmtTime(weekMin)}</b><span>ultimi 7 giorni</span></div>
+        <div class="stat-box"><b>${fmtTime(monthMin)}</b><span>questo mese</span></div>
+      </div>
+      <h3 class="stats-sec">Ultimi 7 giorni</h3>
+      <div class="bars">${days
+        .map(
+          (d) => `<div class="bar ${d.isToday ? "today" : ""}">
+            <span class="v">${d.min ? String(Math.round(d.min / 6) / 10).replace(".", ",") + " h" : ""}</span>
+            <i class="${d.min ? "" : "zero"}" style="height:${d.min ? Math.max(6, (d.min / maxDay) * 80) : 4}px"></i>
+            <em>${esc(d.label)}</em></div>`
+        )
+        .join("")}</div>
+      ${topGenres.length ? `<h3 class="stats-sec">Generi che guardi di più</h3>${topGenres
+        .map(([g, n]) => `<div class="genre-row"><span class="g-name">${esc(g)}</span><span class="g-bar"><i style="width:${(n / maxG) * 100}%"></i></span><span class="g-val">${n} ep.</span></div>`)
+        .join("")}` : ""}
+      <p class="stats-note">È una stima: l'app conta gli episodi che segni, ognuno per la sua durata (di solito circa 24 minuti). Oggi, settimana e mese si basano su quando li hai segnati.</p>`;
+  }
+
+  $("#statsBtn").addEventListener("click", () => {
+    loadDB().catch(() => {}).then(() => {
+      renderStats();
+    });
+    renderStats();
+    openSheet("#statsSheet");
+  });
+
   // ---------- Backup ----------
   $("#menuBtn").addEventListener("click", () => {
     openSheet("#menuSheet");
@@ -667,7 +796,7 @@
   });
 
   $("#exportBtn").addEventListener("click", () => {
-    const blob = new Blob([JSON.stringify({ app: "animeteca", version: 1, list }, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ app: "animeteca", version: 2, list, log }, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `animeteca-backup-${new Date().toISOString().slice(0, 10)}.json`;
@@ -690,7 +819,9 @@
       }
       if (!confirm(`Importare ${items.length} anime? La lista attuale verrà sostituita.`)) return;
       list = items;
+      log = Array.isArray(data.log) ? data.log.filter((e) => e && e.t && e.id) : [];
       save();
+      saveLog();
       closeSheet("#menuSheet");
       renderAll();
       toast(`Importati ${items.length} anime`);

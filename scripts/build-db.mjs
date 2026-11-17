@@ -27,7 +27,7 @@ const QUERY = `query ($page: Int, $perPage: Int, $from: FuzzyDateInt, $to: Fuzzy
       title { romaji english }
       coverImage { large }
       description(asHtml: false)
-      episodes seasonYear startDate { year month day }
+      episodes duration seasonYear startDate { year month day }
       format averageScore popularity genres
       relations { edges { relationType node { id type } } }
     }
@@ -138,6 +138,7 @@ export function build(all) {
         m.averageScore || 0,
         m.popularity || 0,
         SEASON_TYPES.has(m.format) ? 1 : 0,
+        m.duration || 0,
       ];
     });
 
@@ -151,7 +152,7 @@ export function build(all) {
       updated: new Date().toISOString().slice(0, 10),
       coverPrefix: COVER_PREFIX,
       shards: SHARDS,
-      fields: ["anilistId", "malId", "title", "altTitle", "type", "year", "episodes", "cover", "score", "popularity", "isSeason"],
+      fields: ["anilistId", "malId", "title", "altTitle", "type", "year", "episodes", "cover", "score", "popularity", "isSeason", "duration"],
       items,
     },
     shards,

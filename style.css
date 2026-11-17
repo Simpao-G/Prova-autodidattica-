@@ -206,6 +206,36 @@ img { display: block; }
 .status-btn[data-status="done"].active { background: var(--green); }
 .remove-btn { display: block; margin: 8px auto 0; border: 0; background: none; color: #ff7b7b; font-size: 14px; padding: 8px; }
 
+/* --- Statistiche --- */
+.top-actions { display: flex; gap: 8px; }
+.stats-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.stats-head h2 { margin: 0; font-size: 20px; }
+.big-stat {
+  text-align: center; padding: 22px 14px; border-radius: 20px; margin-bottom: 12px;
+  background: linear-gradient(135deg, rgba(255,92,154,.25), rgba(139,92,246,.25)); border: 1px solid var(--line);
+}
+.big-stat .num { font-size: 44px; font-weight: 800; line-height: 1.1; letter-spacing: -1px; }
+.big-stat .num small { font-size: 20px; font-weight: 700; color: var(--muted); letter-spacing: 0; }
+.big-stat .cap { color: var(--muted); font-size: 14px; margin-top: 4px; }
+.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.stat-box { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 6px; text-align: center; }
+.stat-box b { display: block; font-size: 18px; }
+.stat-box span { font-size: 12px; color: var(--muted); }
+.stats-sec { margin: 20px 0 8px; font-size: 16px; }
+.bars { display: flex; align-items: flex-end; gap: 8px; height: 130px; padding: 6px 4px 0; }
+.bar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; min-width: 0; }
+.bar i { display: block; width: 100%; max-width: 38px; border-radius: 8px 8px 4px 4px; background: linear-gradient(180deg, var(--accent), var(--accent-2)); min-height: 4px; }
+.bar i.zero { background: var(--line); }
+.bar em { font-style: normal; font-size: 11px; color: var(--muted); }
+.bar .v { font-size: 11px; color: var(--text); font-weight: 700; min-height: 14px; }
+.bar.today em { color: var(--yellow); font-weight: 700; }
+.genre-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 14px; }
+.genre-row .g-name { width: 92px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.genre-row .g-bar { flex: 1; height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; }
+.genre-row .g-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 99px; }
+.genre-row .g-val { width: 52px; flex: none; text-align: right; color: var(--muted); font-size: 12px; }
+.stats-note { color: var(--muted); font-size: 12px; margin: 16px 2px 0; }
+
 /* --- Stagioni --- */
 .section-title { margin: 26px 0 2px; font-size: 18px; }
 .season-sum { margin: 0 0 12px; color: var(--muted); font-size: 14px; }

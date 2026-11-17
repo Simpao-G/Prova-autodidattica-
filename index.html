@@ -18,7 +18,10 @@
 <body>
   <header class="topbar">
     <h1 class="logo">Anime<span>teca</span></h1>
-    <button class="icon-btn" id="menuBtn" aria-label="Menu">⋯</button>
+    <div class="top-actions">
+      <button class="icon-btn" id="statsBtn" aria-label="Statistiche">📊</button>
+      <button class="icon-btn" id="menuBtn" aria-label="Menu">⋯</button>
+    </div>
   </header>
 
   <nav class="tabs" role="tablist">
@@ -50,6 +53,16 @@
     <div class="sheet-panel detail-panel" id="detail"></div>
   </section>
 
+  <!-- Statistiche -->
+  <section class="sheet" id="statsSheet" aria-hidden="true">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-panel">
+      <div class="sheet-handle"></div>
+      <div class="stats-head"><h2>Il tuo tempo sugli anime</h2><button class="text-btn" data-close>Chiudi</button></div>
+      <div id="stats"></div>
+    </div>
+  </section>
+
   <!-- Menu -->
   <section class="sheet" id="menuSheet" aria-hidden="true">
     <div class="sheet-backdrop" data-close></div>
@@ -59,7 +72,7 @@
       <label class="menu-item">⬆️ Importa backup<input type="file" id="importInput" accept="application/json" hidden></label>
       <p class="menu-note">I dati restano salvati solo su questo dispositivo. Fai ogni tanto un backup.</p>
       <p class="menu-note" id="dbInfo"></p>
-      <p class="menu-note">Versione 4</p>
+      <p class="menu-note">Versione 5</p>
     </div>
   </section>
 
