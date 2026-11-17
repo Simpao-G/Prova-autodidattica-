@@ -6,6 +6,7 @@
   "use strict";
 
   const API = "https://api.jikan.moe/v4";
+  const ANILIST = "https://graphql.anilist.co";
   const STORAGE_KEY = "animeteca.v1";
   const STATUS = {
     watching: "In corso",
@@ -79,6 +80,62 @@
       genres: (r.genres || []).map((g) => g.name).slice(0, 4),
       url: r.url || "",
     };
+  }
+
+  // Converte un risultato di AniList nel nostro formato.
+  // Se l'anime esiste anche su MyAnimeList usa lo stesso id "mal-…",
+  // così gli anime già salvati vengono riconosciuti.
+  const FORMATS = { TV: "TV", TV_SHORT: "TV", MOVIE: "Film", SPECIAL: "Special", OVA: "OVA", ONA: "ONA", MUSIC: "Music" };
+  function cleanText(html) {
+    const d = document.createElement("div");
+    d.innerHTML = String(html || "").replace(/<br\s*\/?>/gi, "\n");
+    return (d.textContent || "").replace(/\n{3,}/g, "\n\n").replace(/\s*\(Source:[^)]*\)\s*$/i, "").trim();
+  }
+  function fromAniList(m) {
+    return {
+      id: m.idMal ? "mal-" + m.idMal : "al-" + m.id,
+      malId: m.idMal || null,
+      title: m.title?.english || m.title?.romaji || m.title?.native || "Senza titolo",
+      altTitle: m.title?.english && m.title?.romaji !== m.title.english ? m.title.romaji : "",
+      image: m.coverImage?.extraLarge || m.coverImage?.large || "",
+      synopsis: cleanText(m.description),
+      episodes: m.episodes || null,
+      year: m.seasonYear || m.startDate?.year || null,
+      score: m.averageScore ? (m.averageScore / 10).toFixed(1) : null,
+      type: FORMATS[m.format] || m.format || "",
+      genres: (m.genres || []).slice(0, 4),
+      url: m.idMal ? `https://myanimelist.net/anime/${m.idMal}` : m.siteUrl || "",
+    };
+  }
+
+  const ANILIST_QUERY = `query ($q: String) {
+    Page(perPage: 15) {
+      media(search: $q, type: ANIME, isAdult: false, sort: [SEARCH_MATCH, POPULARITY_DESC]) {
+        id idMal title { romaji english native } coverImage { extraLarge large }
+        description(asHtml: false) episodes seasonYear startDate { year }
+        averageScore format genres siteUrl
+      }
+    }
+  }`;
+
+  async function searchAniList(q, signal) {
+    const res = await fetch(ANILIST, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ query: ANILIST_QUERY, variables: { q } }),
+      signal,
+    });
+    if (!res.ok) throw new Error("AniList HTTP " + res.status);
+    const json = await res.json();
+    if (json.errors?.length) throw new Error("AniList: " + json.errors[0].message);
+    return (json.data?.Page?.media || []).map(fromAniList);
+  }
+
+  async function searchJikan(q, signal) {
+    const res = await fetch(`${API}/anime?q=${encodeURIComponent(q)}&limit=15&sfw=true&order_by=members&sort=desc`, { signal });
+    if (!res.ok) throw new Error("MyAnimeList HTTP " + res.status);
+    const json = await res.json();
+    return (json.data || []).map(fromJikan);
   }
 
   // ---------- Azioni ----------
@@ -294,21 +351,28 @@
     }
     box.innerHTML = `<div class="spinner"></div>`;
     searchCtrl = new AbortController();
-    try {
-      const res = await fetch(`${API}/anime?q=${encodeURIComponent(q)}&limit=15&sfw=true&order_by=members&sort=desc`, {
-        signal: searchCtrl.signal,
-      });
-      if (res.status === 429) throw new Error("troppe richieste");
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const json = await res.json();
-      // L'API può restituire duplicati: li togliamo
-      const seen = new Set();
-      const results = (json.data || []).map(fromJikan).filter((r) => !seen.has(r.id) && seen.add(r.id));
-      renderResults(results);
-    } catch (err) {
-      if (err.name === "AbortError") return;
-      box.innerHTML = `<p class="status-msg">Ricerca non disponibile ora (${esc(err.message)}).<br>Controlla la connessione e riprova.</p>${manualButton()}`;
+    const signal = searchCtrl.signal;
+    const errors = [];
+    // Prima AniList, se non risponde (o non trova nulla) prova MyAnimeList
+    for (const source of [searchAniList, searchJikan]) {
+      try {
+        const found = await source(q, signal);
+        if (signal.aborted) return;
+        if (!found.length) continue;
+        // Le API possono restituire duplicati: li togliamo
+        const seen = new Set();
+        renderResults(found.filter((r) => !seen.has(r.id) && seen.add(r.id)));
+        return;
+      } catch (err) {
+        if (err.name === "AbortError") return;
+        errors.push(err.message || String(err));
+      }
     }
+    if (errors.length < 2) return renderResults([]);
+    const offline = !navigator.onLine;
+    box.innerHTML = `<p class="status-msg">${
+      offline ? "Sei offline: collegati a internet per cercare." : "Ricerca non disponibile in questo momento. Riprova tra poco."
+    }<br><small>${esc(errors.join(" · "))}</small></p>${manualButton()}`;
   }
 
   function addManual() {

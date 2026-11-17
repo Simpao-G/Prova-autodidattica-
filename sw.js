@@ -1,5 +1,5 @@
 // Service worker: permette all'app di aprirsi anche offline.
-const CACHE = "animeteca-v1";
+const CACHE = "animeteca-v2";
 const SHELL = [
   "./",
   "index.html",
@@ -32,7 +32,7 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(req.url);
 
   // Copertine: prima dalla cache, così si vedono anche offline
-  if (url.hostname.endsWith("myanimelist.net") && req.destination === "image") {
+  if ((url.hostname.endsWith("myanimelist.net") || url.hostname.endsWith("anilist.co")) && req.destination === "image") {
     e.respondWith(
       caches.open(IMG_CACHE).then(async (c) => {
         const hit = await c.match(req);
