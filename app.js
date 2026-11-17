@@ -10,6 +10,7 @@
   const ANILIST = "https://graphql.anilist.co";
   const STORAGE_KEY = "animeteca.v1";
   const LOG_KEY = "animeteca.log.v1";
+  const REAL_KEY = "animeteca.real.v1";
   const STATUS = {
     watching: "In corso",
     plan: "Da vedere",
@@ -39,6 +40,23 @@
   const findItem = (id) => list.find((a) => a.id === id);
 
   // Registro degli episodi segnati (data + quanti): serve per le statistiche
+  // Tempo reale (letto da Tempo di Utilizzo dell'iPad), inserito a mano: [{t, m}]
+  let real = loadReal();
+  function loadReal() {
+    try {
+      const d = JSON.parse(localStorage.getItem(REAL_KEY));
+      return Array.isArray(d) ? d : [];
+    } catch {
+      return [];
+    }
+  }
+  function saveReal() {
+    try {
+      localStorage.setItem(REAL_KEY, JSON.stringify(real));
+    } catch {
+      toast("⚠️ Impossibile salvare i dati");
+    }
+  }
   let log = loadLog();
   function loadLog() {
     try {
@@ -693,6 +711,35 @@
     return h ? `${h} h${m ? " " + m + " min" : ""}` : `${m} min`;
   };
 
+  const localDate = (d = new Date()) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  // Riquadro "tempo reale": ore lette da Tempo di Utilizzo e inserite a mano
+  function realSection() {
+    const now = new Date();
+    const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const sum = (from) => real.filter((e) => e.t >= from).reduce((n, e) => n + e.m, 0);
+    const total = real.reduce((n, e) => n + e.m, 0);
+    const recent = [...real].sort((a, b) => b.t - a.t).slice(0, 5);
+    return `
+      <h3 class="stats-sec">Tempo reale su AnimeSaturn</h3>
+      <div class="big-stat real"><div class="num">${esc(fmtTime(total))}</div><div class="cap">${
+        real.length ? `${esc(fmtTime(sum(t0 - 6 * 86400000)))} negli ultimi 7 giorni` : "ancora nessun tempo inserito"
+      }</div></div>
+      <form class="real-form" id="realForm">
+        <label>Giorno<input type="date" name="day" value="${localDate()}" max="${localDate()}" required></label>
+        <label>Ore<input type="number" name="h" min="0" max="24" inputmode="numeric" placeholder="0"></label>
+        <label>Min<input type="number" name="min" min="0" max="59" inputmode="numeric" placeholder="0"></label>
+        <button type="submit" class="real-add">Aggiungi</button>
+      </form>
+      ${recent
+        .map(
+          (e) => `<div class="real-row"><span>${esc(new Date(e.t).toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" }))}</span><b>${esc(fmtTime(e.m))}</b><button data-real-del="${e.t}" aria-label="Elimina">✕</button></div>`
+        )
+        .join("")}
+      <p class="stats-note">Su iPad apri Impostazioni → Tempo di Utilizzo → Mostra tutte le attività, tocca <b>Safari</b> e leggi il tempo di AnimeSaturn nell'elenco dei siti web. Inseriscilo qui, per esempio una volta al giorno. Funziona solo se lo guardi con Safari.</p>`;
+  }
+
   function renderStats() {
     const box = $("#stats");
     // Totale: episodi segnati x durata (conta anche quello che avevi già segnato prima)
@@ -730,7 +777,7 @@
     const maxDay = Math.max(1, ...days.map((d) => d.min));
 
     if (!totalEps) {
-      box.innerHTML = `<div class="empty"><div class="big">📊</div><p><strong>Ancora niente da mostrare.</strong></p><p>Segna gli episodi che guardi e qui vedrai quanto tempo ci passi.</p></div>`;
+      box.innerHTML = `<div class="empty"><div class="big">📊</div><p><strong>Ancora niente da mostrare.</strong></p><p>Segna gli episodi che guardi e qui vedrai quanto tempo ci passi.</p></div>${realSection()}`;
       return;
     }
 
@@ -766,11 +813,35 @@
             <em>${esc(d.label)}</em></div>`
         )
         .join("")}</div>
+      ${realSection()}
       ${topGenres.length ? `<h3 class="stats-sec">Generi che guardi di più</h3>${topGenres
         .map(([g, n]) => `<div class="genre-row"><span class="g-name">${esc(g)}</span><span class="g-bar"><i style="width:${(n / maxG) * 100}%"></i></span><span class="g-val">${n} ep.</span></div>`)
         .join("")}` : ""}
-      <p class="stats-note">È una stima: l'app conta gli episodi che segni, ognuno per la sua durata (di solito circa 24 minuti). Oggi, settimana e mese si basano su quando li hai segnati.</p>`;
+      <p class="stats-note">I numeri qui sopra sono una stima: l'app conta gli episodi che segni, ognuno per la sua durata (di solito circa 24 minuti). Oggi, settimana e mese si basano su quando li hai segnati.</p>`;
   }
+
+  $("#stats").addEventListener("submit", (e) => {
+    if (e.target.id !== "realForm") return;
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const m = (parseInt(f.get("h"), 10) || 0) * 60 + (parseInt(f.get("min"), 10) || 0);
+    const [y, mo, d] = String(f.get("day")).split("-").map(Number);
+    if (!m || !y) return toast("Inserisci ore o minuti");
+    const t = new Date(y, mo - 1, d, 12).getTime();
+    // Un solo valore per giorno: se esiste già, lo sostituisce
+    real = real.filter((x) => localDate(new Date(x.t)) !== localDate(new Date(t)));
+    real.push({ t, m });
+    saveReal();
+    toast(`Aggiunto: ${fmtTime(m)}`);
+    renderStats();
+  });
+  $("#stats").addEventListener("click", (e) => {
+    const del = e.target.closest("[data-real-del]");
+    if (!del) return;
+    real = real.filter((x) => String(x.t) !== del.dataset.realDel);
+    saveReal();
+    renderStats();
+  });
 
   $("#statsBtn").addEventListener("click", () => {
     loadDB().catch(() => {}).then(() => {
@@ -796,7 +867,7 @@
   });
 
   $("#exportBtn").addEventListener("click", () => {
-    const blob = new Blob([JSON.stringify({ app: "animeteca", version: 2, list, log }, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ app: "animeteca", version: 3, list, log, real }, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `animeteca-backup-${new Date().toISOString().slice(0, 10)}.json`;
@@ -822,6 +893,8 @@
       log = Array.isArray(data.log) ? data.log.filter((e) => e && e.t && e.id) : [];
       save();
       saveLog();
+      real = Array.isArray(data.real) ? data.real.filter((e) => e && e.t && e.m > 0) : [];
+      saveReal();
       closeSheet("#menuSheet");
       renderAll();
       toast(`Importati ${items.length} anime`);

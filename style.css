@@ -236,6 +236,18 @@ img { display: block; }
 .genre-row .g-val { width: 52px; flex: none; text-align: right; color: var(--muted); font-size: 12px; }
 .stats-note { color: var(--muted); font-size: 12px; margin: 16px 2px 0; }
 
+.big-stat.real .num { font-size: 34px; }
+.real-form { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 8px; align-items: end; margin-bottom: 8px; }
+.real-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); min-width: 0; }
+.real-form input {
+  width: 100%; min-width: 0; padding: 10px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--text); font-size: 16px; font-family: inherit;
+}
+.real-add { grid-column: 1 / -1; padding: 12px; border: 0; border-radius: 12px; font-weight: 700; color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.real-row { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.real-row span { flex: 1; color: var(--muted); }
+.real-row button { border: 0; background: none; color: var(--muted); padding: 4px 8px; font-size: 14px; }
+
 /* --- Stagioni --- */
 .section-title { margin: 26px 0 2px; font-size: 18px; }
 .season-sum { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
