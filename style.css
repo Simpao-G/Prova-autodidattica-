@@ -303,6 +303,21 @@ img { display: block; }
 .season.current { border-color: var(--yellow); cursor: default; }
 .season:disabled { opacity: 1; color: inherit; }
 
+/* --- Account --- */
+.acc-card { display: flex; flex-direction: column; gap: 8px; padding: 14px; margin-bottom: 12px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); }
+.acc-card > b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acc-card .menu-note { margin: 0; }
+.acc-card input {
+  width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--text); font-size: 16px; font-family: inherit;
+}
+.acc-card input:focus { outline: none; border-color: var(--accent-2); }
+.acc-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.acc-actions .s-secondary, .acc-actions .real-add { margin: 0; }
+.acc-actions button:disabled { opacity: .6; }
+.acc-msg { margin: 0; padding: 10px 12px; border-radius: 12px; background: rgba(255,212,92,.12); color: var(--yellow); font-size: 14px; }
+.acc-status { color: var(--text); }
+
 /* --- Menu --- */
 .menu-panel { padding-bottom: calc(30px + var(--safe-bottom)); }
 .menu-item {

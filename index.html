@@ -79,16 +79,19 @@
     <div class="sheet-backdrop" data-close></div>
     <div class="sheet-panel menu-panel">
       <div class="sheet-handle"></div>
+      <div id="accountBox"></div>
       <button class="menu-item" id="exportBtn">⬇️ Esporta backup</button>
       <label class="menu-item">⬆️ Importa backup<input type="file" id="importInput" accept="application/json" hidden></label>
-      <p class="menu-note">I dati restano salvati solo su questo dispositivo. Fai ogni tanto un backup.</p>
+      <p class="menu-note" id="storageNote">I dati restano salvati solo su questo dispositivo. Fai ogni tanto un backup.</p>
       <p class="menu-note" id="dbInfo"></p>
-      <p class="menu-note">Versione 9</p>
+      <p class="menu-note">Versione 10</p>
     </div>
   </section>
 
   <div class="toast" id="toast" role="status"></div>
 
+  <script src="config.js"></script>
+  <script src="sync-core.js"></script>
   <script src="saturn.js" data-define-only></script>
   <script src="app.js"></script>
 </body>

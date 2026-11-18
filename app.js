@@ -11,6 +11,7 @@
   const STORAGE_KEY = "animeteca.v1";
   const LOG_KEY = "animeteca.log.v1";
   const REAL_KEY = "animeteca.real.v1";
+  const DELETED_KEY = "animeteca.deleted.v1"; // cosa hai cancellato (serve alla sincronizzazione)
   const STATUS = {
     watching: "In corso",
     plan: "Da vedere",
@@ -36,6 +37,25 @@
     } catch {
       toast("⚠️ Impossibile salvare i dati");
     }
+    scheduleSync();
+  }
+
+  // Anime e tempi cancellati, con l'ora: così la cancellazione arriva anche sugli altri dispositivi
+  let deleted = loadDeleted();
+  function loadDeleted() {
+    try {
+      const d = JSON.parse(localStorage.getItem(DELETED_KEY));
+      return { anime: d?.anime || {}, real: d?.real || {} };
+    } catch {
+      return { anime: {}, real: {} };
+    }
+  }
+  function saveDeleted() {
+    try {
+      localStorage.setItem(DELETED_KEY, JSON.stringify(deleted));
+    } catch {
+      /* non grave */
+    }
   }
   const findItem = (id) => list.find((a) => a.id === id);
 
@@ -56,6 +76,7 @@
     } catch {
       toast("⚠️ Impossibile salvare i dati");
     }
+    scheduleSync();
   }
   let log = loadLog();
   function loadLog() {
@@ -73,6 +94,7 @@
     } catch {
       /* statistiche non salvate, non è grave */
     }
+    scheduleSync();
   }
 
   // ---------- Utilità ----------
@@ -362,6 +384,8 @@
   function removeItem(item) {
     if (!confirm(`Rimuovere "${item.title}" dalla lista?`)) return;
     list = list.filter((a) => a.id !== item.id);
+    deleted.anime[item.id] = Date.now();
+    saveDeleted();
     save();
     closeSheet("#detailSheet");
     toast("Rimosso");
@@ -863,7 +887,7 @@
     const t = new Date(y, mo - 1, d, 12).getTime();
     // Un solo valore manuale per giorno: se esiste già, lo sostituisce (le sessioni del timer restano)
     real = real.filter((x) => x.s === "timer" || localDate(new Date(x.t)) !== localDate(new Date(t)));
-    real.push({ t, m, s: "manual" });
+    real.push({ t, m, s: "manual", u: Date.now() });
     saveReal();
     toast(`Aggiunto: ${fmtTime(m)}`);
     renderStats();
@@ -886,6 +910,8 @@
     }
     const del = e.target.closest("[data-real-del]");
     if (!del) return;
+    for (const x of real) if (String(x.t) === del.dataset.realDel) deleted.real[`${x.s || "manual"}|${x.t}`] = Date.now();
+    saveDeleted();
     real = real.filter((x) => String(x.t) !== del.dataset.realDel);
     saveReal();
     renderStats();
@@ -960,7 +986,7 @@
       const [y, mo, d] = day.split("-").map(Number);
       // Il segnalibro manda sempre il totale del giorno: sostituisce, non somma
       real = real.filter((x) => !(x.s === "saturn" && x.day === day && x.host === host));
-      real.push({ t: new Date(y, mo - 1, d, 12).getTime(), m, s: "saturn", day, host, title: "AnimeSaturn" });
+      real.push({ t: new Date(y, mo - 1, d, 12).getTime(), m, s: "saturn", day, host, title: "AnimeSaturn", u: Date.now() });
       days++;
       if (day === localDate()) todayMin = m;
     }
@@ -1136,7 +1162,7 @@
     if (e.target.closest("#sessSave")) {
       const m = Math.max(0, Math.min(1440, parseInt($("#sessMin").value, 10) || 0));
       if (m) {
-        real.push({ t: Date.now(), m, s: "timer", id: session.id, title: session.title });
+        real.push({ t: Date.now(), m, s: "timer", id: session.id, title: session.title, u: Date.now() });
         saveReal();
       }
       const eps = item ? sessionEps : 0;
@@ -1147,8 +1173,214 @@
     }
   });
 
+  // ---------- Account e sincronizzazione ----------
+  // Con l'account (Supabase) la lista è la stessa su iPhone, iPad, ecc.
+  // Ogni dispositivo tiene la sua copia (funziona anche offline) e, quando può,
+  // la unisce con quella online: vedi sync-core.js.
+  const CONFIG = window.ANIMETECA_CONFIG || {};
+  const Sync = window.AnimetecaSync;
+  const LAST_SYNC_KEY = "animeteca.lastsync.v1";
+  const cloud =
+    Sync && CONFIG.supabaseUrl && CONFIG.supabaseKey
+      ? Sync.createClient({ url: CONFIG.supabaseUrl, key: CONFIG.supabaseKey, storage: localStorage })
+      : null;
+  let syncTimer = null;
+  let syncing = false;
+  let syncAgain = false;
+  let applyingRemote = false;
+  let syncState = { status: "idle", error: "" };
+  let lastSync = Number(localStorage.getItem(LAST_SYNC_KEY)) || 0;
+
+  const localState = () => ({ list, log, real, deleted });
+
+  // Le modifiche fatte su questo dispositivo partono dopo 2 secondi (più modifiche insieme = un invio)
+  function scheduleSync() {
+    if (!cloud || applyingRemote || !cloud.user()) return;
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => syncNow(), 2000);
+  }
+
+  // Dati arrivati dagli altri dispositivi: li salva qui senza farli ripartire subito
+  function applyLocal(d) {
+    applyingRemote = true;
+    try {
+      list = d.list;
+      log = d.log;
+      real = d.real;
+      deleted = d.deleted;
+      save();
+      saveLog();
+      saveReal();
+      saveDeleted();
+    } finally {
+      applyingRemote = false;
+    }
+    renderAll();
+    renderTimer();
+    if ($("#statsSheet").classList.contains("open")) renderStats();
+  }
+
+  async function syncNow({ force = false } = {}) {
+    if (!cloud || !cloud.user()) return;
+    if (syncing) {
+      syncAgain = true;
+      return;
+    }
+    clearTimeout(syncTimer);
+    syncing = true;
+    syncState = { status: "syncing", error: "" };
+    renderAccount();
+    try {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const remote = await cloud.getRemote();
+        const merged = force || !remote ? Sync.normalize(localState()) : Sync.merge(localState(), remote.data);
+        if (!Sync.same(merged, localState())) applyLocal(merged);
+        if (remote && !force && Sync.same(merged, remote.data)) break; // già uguali
+        const rev = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+        const ok = remote ? await cloud.updateRemote(Sync.slim(merged), remote.rev, rev) : await cloud.insertRemote(Sync.slim(merged), rev);
+        if (ok) break;
+        // un altro dispositivo ha scritto proprio adesso: rilegge e riunisce
+        force = false;
+      }
+      lastSync = Date.now();
+      localStorage.setItem(LAST_SYNC_KEY, String(lastSync));
+      syncState = { status: "ok", error: "" };
+    } catch (err) {
+      syncState = { status: err.offline ? "offline" : "error", error: err.message || String(err) };
+      if (err.loggedOut) toast("Sessione scaduta: accedi di nuovo dal menu ⋯");
+    } finally {
+      syncing = false;
+      renderAccount();
+      if (syncAgain) {
+        syncAgain = false;
+        scheduleSync();
+      }
+    }
+  }
+
+  const ago = (t) => {
+    const s = Math.round((Date.now() - t) / 1000);
+    if (s < 60) return "adesso";
+    if (s < 3600) return `${Math.round(s / 60)} min fa`;
+    if (s < 86400) return `${Math.round(s / 3600)} h fa`;
+    return new Date(t).toLocaleDateString("it-IT");
+  };
+
+  let accountMsg = "";
+  function renderAccount() {
+    const box = $("#accountBox");
+    if (!box) return;
+    const note = $("#storageNote");
+    if (!cloud) {
+      box.innerHTML = `<div class="acc-card"><b>👤 Account</b><p class="menu-note">La sincronizzazione tra dispositivi non è ancora configurata.</p></div>`;
+      return;
+    }
+    const user = cloud.user();
+    if (note) {
+      note.textContent = user
+        ? "I tuoi dati sono salvati su questo dispositivo e nel tuo account."
+        : "I dati restano salvati solo su questo dispositivo. Fai ogni tanto un backup.";
+    }
+    if (!user) {
+      box.innerHTML = `
+        <form class="acc-card" id="accForm" autocomplete="on">
+          <b>👤 Account</b>
+          <p class="menu-note">Accedi per avere la stessa lista su iPhone e iPad.</p>
+          <input type="email" name="email" placeholder="Email" autocomplete="username" required>
+          <input type="password" name="password" placeholder="Password (almeno 6 caratteri)" autocomplete="current-password" minlength="6" required>
+          ${accountMsg ? `<p class="acc-msg">${esc(accountMsg)}</p>` : ""}
+          <div class="acc-actions">
+            <button type="submit" class="real-add" data-acc="login">Accedi</button>
+            <button type="submit" class="s-secondary" data-acc="signup">Crea account</button>
+          </div>
+        </form>`;
+      return;
+    }
+    const status = {
+      syncing: "🔄 Sincronizzazione in corso…",
+      ok: `✅ Sincronizzato ${lastSync ? ago(lastSync) : ""}`,
+      offline: "📴 Offline: sincronizzo appena torna la connessione",
+      error: `⚠️ ${syncState.error}`,
+      idle: lastSync ? `✅ Sincronizzato ${ago(lastSync)}` : "In attesa di sincronizzare…",
+    }[syncState.status];
+    box.innerHTML = `
+      <div class="acc-card">
+        <b>👤 ${esc(user.email)}</b>
+        <p class="menu-note acc-status">${esc(status)}</p>
+        <div class="acc-actions">
+          <button type="button" class="s-secondary" id="accSync">Sincronizza ora</button>
+          <button type="button" class="s-secondary" id="accLogout">Esci</button>
+        </div>
+      </div>`;
+  }
+
+  $("#accountBox").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const action = e.submitter?.dataset.acc || "login";
+    const email = form.email.value.trim();
+    const password = form.password.value;
+    form.querySelectorAll("button").forEach((b) => (b.disabled = true));
+    try {
+      if (action === "signup") {
+        const r = await cloud.signUp(email, password);
+        if (r.needsConfirmation) {
+          accountMsg = "Ti abbiamo mandato un'email: apri il link per confermare l'account, poi torna qui e accedi.";
+          return renderAccount();
+        }
+        toast("Account creato! 🎉");
+      } else {
+        await cloud.signIn(email, password);
+        toast("Accesso effettuato");
+      }
+      accountMsg = "";
+      await syncNow();
+      toast("Lista sincronizzata ✅");
+    } catch (err) {
+      accountMsg = err.message || String(err);
+      renderAccount();
+    }
+  });
+
+  $("#accountBox").addEventListener("click", async (e) => {
+    if (e.target.closest("#accSync")) return syncNow();
+    if (e.target.closest("#accLogout")) {
+      if (!confirm("Uscire dall'account? La lista resta su questo dispositivo, ma non si sincronizza più.")) return;
+      await cloud.signOut();
+      syncState = { status: "idle", error: "" };
+      renderAccount();
+      toast("Sei uscito dall'account");
+    }
+  });
+
+  // Quando torni nell'app o torna internet, prende le modifiche fatte sugli altri dispositivi
+  let lastFocusSync = 0;
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden || Date.now() - lastFocusSync < 20 * 1000) return;
+    lastFocusSync = Date.now();
+    syncNow();
+  });
+  window.addEventListener("online", () => syncNow());
+  window.addEventListener("hashchange", () => handleAuthRedirect()); // link aperto in una pagina già aperta
+
+  // Link dell'email di conferma: arriva qui con #access_token=...
+  async function handleAuthRedirect() {
+    if (!cloud || !/access_token=|error_description=/.test(location.hash)) return;
+    const hash = location.hash;
+    history.replaceState(null, "", location.pathname + location.search);
+    try {
+      if (await cloud.fromUrlHash(hash)) {
+        toast("Email confermata: sei dentro! 🎉");
+        await syncNow();
+      }
+    } catch (err) {
+      toast(err.message || "Link non valido");
+    }
+  }
+
   // ---------- Backup ----------
   $("#menuBtn").addEventListener("click", () => {
+    renderAccount();
     openSheet("#menuSheet");
     const info = $("#dbInfo");
     info.textContent = "Database anime: caricamento…";
@@ -1191,9 +1423,12 @@
       saveLog();
       real = Array.isArray(data.real) ? data.real.filter((e) => e && e.t && e.m > 0) : [];
       saveReal();
+      deleted = { anime: {}, real: {} };
+      saveDeleted();
       closeSheet("#menuSheet");
       renderAll();
       toast(`Importati ${items.length} anime`);
+      syncNow({ force: true }); // con l'account, il backup sostituisce anche i dati online
     } catch (err) {
       toast("File non valido: " + err.message);
     }
@@ -1204,6 +1439,8 @@
   renderTimer();
   if (!document.hidden) onShow();
   importSaturn();
+  renderAccount();
+  handleAuthRedirect().then(() => syncNow());
 
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
     navigator.serviceWorker.register("sw.js").catch(() => {});

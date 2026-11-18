@@ -39,6 +39,22 @@ che va solo mentre la pagina è visibile; con **Invia** il tempo passa nelle sta
 un'app normale, anche offline. I dati restano salvati sul telefono; dal menu **⋯** puoi esportare e
 importare un backup.
 
+## Account: stessa lista su iPhone e iPad
+
+Dal menu **⋯ → Account** crei un account (email e password) e lo usi su tutti i dispositivi.
+Ogni dispositivo tiene la sua copia (funziona anche offline) e la unisce con quella online:
+per ogni anime vince la modifica più recente, episodi e tempi si sommano senza doppioni,
+le cancellazioni arrivano anche sugli altri dispositivi.
+
+Il server è un progetto gratuito di [Supabase](https://supabase.com). Per configurarlo (una volta):
+
+1. crea il progetto su supabase.com;
+2. in **SQL Editor** esegui `supabase/setup.sql` (crea la tabella e le regole: ognuno vede solo i suoi dati);
+3. in **Authentication → URL Configuration** metti come *Site URL* l'indirizzo dell'app;
+4. copia *Project URL* e *publishable key* in `config.js`.
+
+La logica di unione e il collegamento a Supabase sono in `sync-core.js`.
+
 ## Metterla sul telefono
 
 L'app va pubblicata online una volta sola. Il modo più semplice è GitHub Pages:
