@@ -1434,6 +1434,11 @@
     }
   });
 
+  // Niente zoom pizzicando lo schermo (Safari/Brave su iPhone e iPad)
+  for (const type of ["gesturestart", "gesturechange"]) {
+    document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+  }
+
   // ---------- Avvio ----------
   renderAll();
   renderTimer();
