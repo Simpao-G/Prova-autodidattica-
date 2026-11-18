@@ -5,6 +5,7 @@ on:
     paths:
       - scripts/build-db.mjs
       - scripts/translate.py
+      - scripts/prepare-translator.sh
       - .github/workflows/update-db.yml
   workflow_dispatch:
     inputs:
@@ -12,6 +13,10 @@ on:
         description: "Riscarica gli anime da AniList (se disattivato, traduce soltanto)"
         type: boolean
         default: true
+      minuti:
+        description: "Minuti massimi di traduzione (al massimo 300)"
+        type: number
+        default: 240
   schedule:
     - cron: "17 3 * * 1" # ogni lunedì: anime nuovi + traduzione delle descrizioni nuove
 
@@ -25,7 +30,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 330
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
 
@@ -50,27 +55,21 @@ jobs:
         if: steps.check.outputs.todo != '0'
         uses: actions/cache@v4
         with:
-          path: |
-            .cache/opus-mt-en-it-ct2
-            ~/.cache/huggingface
-          key: opus-mt-en-it-ct2-v1
+          path: .cache/opus-mt-en-it-ct2
+          key: opus-mt-en-it-ct2-v2
 
       - name: Prepara il traduttore
         if: steps.check.outputs.todo != '0'
         continue-on-error: true # se la traduzione fallisce, il database scaricato si salva comunque
-        run: |
-          pip install --quiet ctranslate2==4.5.0 transformers==4.46.3 sentencepiece==0.2.0
-          if [ ! -f .cache/opus-mt-en-it-ct2/model.bin ]; then
-            pip install --quiet torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
-            ct2-transformers-converter --model Helsinki-NLP/opus-mt-en-it \
-              --output_dir .cache/opus-mt-en-it-ct2 --quantization int8 --force
-          fi
+        run: bash scripts/prepare-translator.sh
 
       - name: Traduci le descrizioni in italiano
         if: steps.check.outputs.todo != '0'
         continue-on-error: true
         env:
-          TIME_LIMIT_MIN: "240" # se non finisce, riprende la volta dopo da dove si è fermato
+          # se non finisce, riprende la volta dopo da dove si è fermato.
+          # Dopo una modifica al codice (push) fa solo una prova breve; il lunedì 4 ore.
+          TIME_LIMIT_MIN: ${{ github.event_name == 'push' && '20' || inputs.minuti || '240' }}
         run: python scripts/translate.py
 
       - name: Salva il database nel repository

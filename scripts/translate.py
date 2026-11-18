@@ -1,8 +1,8 @@
 """Traduce in italiano le descrizioni degli anime del database (data/d/*.json).
 
 Usa un modello di traduzione automatica open source che gira direttamente sul
-computer di GitHub Actions (Helsinki-NLP/opus-mt-en-it, convertito per CTranslate2):
-niente servizi esterni e niente limiti di richieste.
+computer di GitHub Actions (Helsinki-NLP OPUS-MT en-it, convertito per CTranslate2
+da scripts/prepare-translator.sh): niente servizi esterni e niente limiti di richieste.
 
 - Traduce solo le descrizioni nuove o cambiate, partendo dagli anime più popolari.
 - Si ferma da solo dopo TIME_LIMIT_MIN minuti: quello che ha tradotto resta salvato
@@ -24,7 +24,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.environ.get("DATA_DIR", ROOT / "data"))
 MODEL_DIR = os.environ.get("MODEL_DIR", str(ROOT / ".cache" / "opus-mt-en-it-ct2"))
-TOKENIZER = os.environ.get("TOKENIZER", "Helsinki-NLP/opus-mt-en-it")
 TIME_LIMIT = float(os.environ.get("TIME_LIMIT_MIN", "240")) * 60
 SAVE_EVERY = float(os.environ.get("SAVE_EVERY_S", "300"))  # salva i progressi ogni 5 minuti
 BATCH = int(os.environ.get("BATCH", "600"))  # frasi tradotte per volta
@@ -88,20 +87,26 @@ def make_translator():
         return fake
 
     import ctranslate2
-    from transformers import AutoTokenizer
+    import sentencepiece as spm
 
-    tokenizer = AutoTokenizer.from_pretrained(TOKENIZER)
+    # il testo si divide in pezzi con lo stesso "vocabolario" usato per addestrare il modello
+    source_sp = spm.SentencePieceProcessor(model_file=os.path.join(MODEL_DIR, "source.spm"))
+    target_sp = spm.SentencePieceProcessor(model_file=os.path.join(MODEL_DIR, "target.spm"))
+    with open(os.path.join(MODEL_DIR, "config.json"), encoding="utf-8") as f:
+        config = json.load(f)
+    # i modelli Marian vogliono "</s>" a fine frase: va aggiunto solo se il modello non lo fa già
+    add_eos = not config.get("add_source_eos", False)
     translator = ctranslate2.Translator(
         MODEL_DIR, device="cpu", compute_type="int8", inter_threads=1, intra_threads=os.cpu_count() or 4
     )
 
     def translate(sentences):
-        source = [tokenizer.convert_ids_to_tokens(tokenizer.encode(s, truncation=True, max_length=400)) for s in sentences]
+        source = []
+        for s in sentences:
+            pieces = source_sp.encode(s, out_type=str)[:400]
+            source.append(pieces + ["</s>"] if add_eos else pieces)
         results = translator.translate_batch(source, max_batch_size=48, beam_size=2, max_decoding_length=400)
-        return [
-            tokenizer.decode(tokenizer.convert_tokens_to_ids(r.hypotheses[0]), skip_special_tokens=True).strip()
-            for r in results
-        ]
+        return [target_sp.decode([t for t in r.hypotheses[0] if t != "</s>"]).strip() for r in results]
 
     return translate
 

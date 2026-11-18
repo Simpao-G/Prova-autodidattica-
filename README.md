@@ -34,6 +34,7 @@ Se il database non c'è ancora, l'app cerca online su AniList e MyAnimeList.
 
 Dopo aver scaricato gli anime, lo stesso workflow traduce le descrizioni con `scripts/translate.py`,
 usando un modello di traduzione automatica open source che gira su GitHub
+(preparato da `scripts/prepare-translator.sh`)
 ([Helsinki-NLP/opus-mt-en-it](https://huggingface.co/Helsinki-NLP/opus-mt-en-it) con CTranslate2):
 niente servizi esterni né limiti di richieste. Parte dagli anime più popolari, traduce solo le
 descrizioni nuove o cambiate e, se non finisce entro 4 ore, riprende alla volta successiva
