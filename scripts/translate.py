@@ -35,6 +35,43 @@ SENTENCE_END = re.compile(
 )
 
 
+# Il modello scrive spesso gli accenti finali con l'apostrofo (come nei testi da cui ha
+# imparato): "sara'" invece di "sarà". Qui si correggono, senza toccare gli apostrofi veri
+# ("l'avventura", "un po'") né le virgolette singole ('Kyuubi').
+GRAVE = {"a": "à", "e": "è", "i": "ì", "o": "ò", "u": "ù"}
+KEEP_APOSTROPHE = {"po", "mo"}  # "un po'", "a mo' di"
+
+
+def fix_italian(text):
+    lines = []
+    for line in text.split("\n"):
+        chars = list(line)
+        quote_open = False
+        for i, ch in enumerate(chars):
+            if ch != "'":
+                continue
+            prev = chars[i - 1] if i > 0 else " "
+            nxt = chars[i + 1] if i + 1 < len(chars) else " "
+            if not prev.isalpha():  # dopo uno spazio: virgoletta che si apre
+                quote_open = quote_open or nxt.isalpha()
+                continue
+            if nxt.isalpha():  # elisione: l'anime, dell'eroe
+                continue
+            if quote_open:  # 'parola' -> virgoletta che si chiude
+                quote_open = False
+                continue
+            word = re.search(r"[^\W\d_]+$", "".join(chars[:i]))
+            word = word.group(0).lower() if word else ""
+            vowel = prev.lower()
+            if vowel not in GRAVE or word in KEEP_APOSTROPHE:
+                continue
+            accented = "é" if vowel == "e" and (word.endswith("ché") or word.endswith("che") or word in ("ne", "se")) else GRAVE[vowel]
+            chars[i - 1] = accented.upper() if prev.isupper() else accented
+            chars[i] = ""
+        lines.append("".join(chars))
+    return "\n".join(lines)
+
+
 def split_sentences(line):
     parts = [p.strip() for p in SENTENCE_END.split(line) if p.strip()]
     return parts or [line.strip()]
@@ -114,6 +151,18 @@ def make_translator():
 def main():
     order, count = load_index()
     shards = load_shards(count)
+    # corregge gli accenti anche nelle traduzioni già fatte (non cambia quelle già a posto)
+    fixed = set()
+    for n, shard in enumerate(shards):
+        for entry in shard.values():
+            if len(entry) > 3 and entry[3]:
+                better = fix_italian(entry[3])
+                if better != entry[3]:
+                    entry[3] = better
+                    fixed.add(n)
+    if fixed and "--check" not in sys.argv:
+        save_shards(shards, set(fixed))
+        print(f"Accenti corretti nelle traduzioni già fatte ({len(fixed)} blocchi)", flush=True)
     todo = find_todo(shards, order)
     print(f"Descrizioni da tradurre: {len(todo)}", flush=True)
 
@@ -154,7 +203,7 @@ def main():
             entry = shards[shard][key]
             while len(entry) < 4:
                 entry.append(None)
-            entry[3] = "\n".join(lines).strip()
+            entry[3] = fix_italian("\n".join(lines).strip())
             dirty.add(shard)
             done += 1
 
