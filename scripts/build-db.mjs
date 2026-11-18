@@ -4,9 +4,10 @@
 //
 // File prodotti:
 //   data/anime.json   indice per la ricerca (titoli, tipo, anno, episodi, copertina...)
-//   data/d/<n>.json   dettagli divisi in blocchi: descrizione, generi, stagioni
+//   data/d/<n>.json   dettagli divisi in blocchi: [descrizione, generi, stagioni, descrizione in italiano]
+//                     (l'italiano lo aggiunge scripts/translate.py)
 
-import { mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdir, writeFile, rm, readFile } from "node:fs/promises";
 
 const API = "https://graphql.anilist.co";
 const OUT = new URL("../data/", import.meta.url);
@@ -117,7 +118,7 @@ export function buildSeasons(all) {
   return seasons;
 }
 
-export function build(all) {
+export function build(all, oldTranslations = new Map()) {
   const seasons = buildSeasons(all);
   const items = all
     .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
@@ -144,7 +145,12 @@ export function build(all) {
 
   const shards = Array.from({ length: SHARDS }, () => ({}));
   for (const m of all) {
-    shards[m.id % SHARDS][m.id] = [cleanText(m.description), (m.genres || []).slice(0, 5), seasons.get(m.id) || []];
+    const description = cleanText(m.description);
+    const entry = [description, (m.genres || []).slice(0, 5), seasons.get(m.id) || []];
+    // tiene la traduzione già fatta se la descrizione inglese non è cambiata
+    const old = oldTranslations.get(m.id);
+    if (old && old[0] === description) entry.push(old[1]);
+    shards[m.id % SHARDS][m.id] = entry;
   }
   return {
     index: {
@@ -182,6 +188,21 @@ async function fetchYear(year) {
   }
 }
 
+// Traduzioni in italiano del database precedente: id -> [descrizione inglese, traduzione]
+async function loadOldTranslations() {
+  const old = new Map();
+  for (let i = 0; i < SHARDS; i++) {
+    try {
+      const shard = JSON.parse(await readFile(new URL(`d/${i}.json`, OUT), "utf8"));
+      for (const [id, entry] of Object.entries(shard)) if (entry && entry[3]) old.set(Number(id), [entry[0], entry[3]]);
+    } catch {
+      /* blocco mancante: niente da tenere */
+    }
+  }
+  console.log(`Traduzioni già fatte: ${old.size}`);
+  return old;
+}
+
 async function main() {
   const byId = new Map();
   const firstYear = Number(process.env.FIRST_YEAR ?? 1940);
@@ -196,7 +217,7 @@ async function main() {
   const all = [...byId.values()];
   if (all.length < (MAX_ITEMS === Infinity ? 5000 : 1)) throw new Error(`Troppo pochi anime (${all.length}): non aggiorno il database`);
 
-  const { index, shards } = build(all);
+  const { index, shards } = build(all, await loadOldTranslations());
   await rm(new URL("d/", OUT), { recursive: true, force: true });
   await mkdir(new URL("d/", OUT), { recursive: true });
   await writeFile(new URL("anime.json", OUT), JSON.stringify(index));

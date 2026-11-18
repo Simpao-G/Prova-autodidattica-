@@ -16,6 +16,8 @@
 
   // ---------- Unione dei dati ----------
   const stamp = (a) => a.updatedAt || a.addedAt || 0;
+  // Campi che ogni dispositivo può riscaricare dal database dell'app: non vanno online
+  const LOCAL_ONLY = ["synopsis", "synopsisEn", "synIt", "seasons"];
   const realKey = (e) => `${e.s || "manual"}|${e.t}`;
   const realStamp = (e) => e.u || e.t || 0;
   const logKey = (e) => `${e.t}|${e.id}|${e.d}`;
@@ -49,14 +51,21 @@
     const byId = new Map();
     for (const it of [...a.list, ...b.list]) {
       const cur = byId.get(it.id);
-      if (!cur) byId.set(it.id, it);
-      else if (stamp(it) > stamp(cur)) {
+      if (!cur) {
+        byId.set(it.id, it);
+        continue;
+      }
+      let win = cur; // a parità vince il primo visto (questo dispositivo)
+      if (stamp(it) > stamp(cur)) {
         // tiene descrizione/stagioni già scaricate se la versione più nuova non le ha
         const keep = {};
-        if (it.synopsis === undefined && cur.synopsis !== undefined) keep.synopsis = cur.synopsis;
-        if (it.seasons === undefined && cur.seasons !== undefined) keep.seasons = cur.seasons;
-        byId.set(it.id, { ...it, ...keep });
+        for (const k of LOCAL_ONLY) if (it[k] === undefined && cur[k] !== undefined) keep[k] = cur[k];
+        win = { ...it, ...keep };
       }
+      // le note hanno una loro data: vince la nota scritta per ultima, su qualunque dispositivo
+      const other = win === cur ? it : cur;
+      if ((other.noteAt || 0) > (win.noteAt || 0)) win = { ...win, note: other.note, noteAt: other.noteAt };
+      byId.set(it.id, win);
     }
     const list = [...byId.values()].filter((it) => !(deleted.anime[it.id] >= stamp(it)));
 
@@ -82,7 +91,8 @@
     const list = d.list
       .map((it) => {
         if (!it.alId) return it;
-        const { synopsis, seasons, ...rest } = it; // eslint-disable-line no-unused-vars
+        const rest = { ...it };
+        for (const k of LOCAL_ONLY) delete rest[k];
         return rest;
       })
       .sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));

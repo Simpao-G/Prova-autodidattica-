@@ -4,10 +4,16 @@ on:
   push:
     paths:
       - scripts/build-db.mjs
+      - scripts/translate.py
       - .github/workflows/update-db.yml
   workflow_dispatch:
+    inputs:
+      scarica:
+        description: "Riscarica gli anime da AniList (se disattivato, traduce soltanto)"
+        type: boolean
+        default: true
   schedule:
-    - cron: "17 3 * * 1" # ogni lunedì
+    - cron: "17 3 * * 1" # ogni lunedì: anime nuovi + traduzione delle descrizioni nuove
 
 permissions:
   contents: write
@@ -19,20 +25,60 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 330
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+
       - name: Scarica gli anime da AniList
+        if: github.event_name != 'workflow_dispatch' || inputs.scarica
         run: node scripts/build-db.mjs
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Quante descrizioni sono da tradurre
+        id: check
+        run: python scripts/translate.py --check
+
+      # Il modello di traduzione (Helsinki-NLP/opus-mt-en-it) si prepara una volta e poi resta in cache
+      - name: Recupera il modello di traduzione
+        if: steps.check.outputs.todo != '0'
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/opus-mt-en-it-ct2
+            ~/.cache/huggingface
+          key: opus-mt-en-it-ct2-v1
+
+      - name: Prepara il traduttore
+        if: steps.check.outputs.todo != '0'
+        continue-on-error: true # se la traduzione fallisce, il database scaricato si salva comunque
+        run: |
+          pip install --quiet ctranslate2==4.5.0 transformers==4.46.3 sentencepiece==0.2.0
+          if [ ! -f .cache/opus-mt-en-it-ct2/model.bin ]; then
+            pip install --quiet torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+            ct2-transformers-converter --model Helsinki-NLP/opus-mt-en-it \
+              --output_dir .cache/opus-mt-en-it-ct2 --quantization int8 --force
+          fi
+
+      - name: Traduci le descrizioni in italiano
+        if: steps.check.outputs.todo != '0'
+        continue-on-error: true
+        env:
+          TIME_LIMIT_MIN: "240" # se non finisce, riprende la volta dopo da dove si è fermato
+        run: python scripts/translate.py
+
       - name: Salva il database nel repository
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898699+github-actions[bot]@users.noreply.github.com"
-          # Il database appena scaricato vince sempre: lo mettiamo da parte, ci allineiamo
-          # all'ultima versione del branch (che può essere cambiata durante il download)
+          # Il database appena preparato vince sempre: lo mettiamo da parte, ci allineiamo
+          # all'ultima versione del branch (che può essere cambiata nel frattempo)
           # e lo rimettiamo al suo posto. Se intanto arriva un altro push, riprova.
           rm -rf "$RUNNER_TEMP/data" && mv data "$RUNNER_TEMP/data"
           for attempt in 1 2 3; do

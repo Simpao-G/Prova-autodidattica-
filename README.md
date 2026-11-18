@@ -30,6 +30,20 @@ tutti gli anime da [AniList](https://anilist.co) con `scripts/build-db.mjs`:
 
 Se il database non c'è ancora, l'app cerca online su AniList e MyAnimeList.
 
+### Descrizioni in italiano
+
+Dopo aver scaricato gli anime, lo stesso workflow traduce le descrizioni con `scripts/translate.py`,
+usando un modello di traduzione automatica open source che gira su GitHub
+([Helsinki-NLP/opus-mt-en-it](https://huggingface.co/Helsinki-NLP/opus-mt-en-it) con CTranslate2):
+niente servizi esterni né limiti di richieste. Parte dagli anime più popolari, traduce solo le
+descrizioni nuove o cambiate e, se non finisce entro 4 ore, riprende alla volta successiva
+(*Actions → Aggiorna database anime → Run workflow* togliendo "Riscarica" traduce soltanto).
+Nell'app, sotto ogni descrizione tradotta, "Mostra l'originale" fa vedere il testo inglese.
+
+**Note personali**: nella scheda di ogni anime della tua lista c'è "Le tue note" (si salvano da sole
+mentre scrivi e si sincronizzano tra i dispositivi; se scrivi su due dispositivi vince l'ultima nota).
+La prima riga della nota compare anche in "Continua a guardare".
+
 Con il pulsante **📊** vedi le **statistiche**: tempo passato sugli anime, episodi visti, oggi /
 settimana / mese, grafico degli ultimi 7 giorni e generi preferiti.
 

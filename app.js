@@ -24,6 +24,8 @@
   let list = load();
   let currentTab = "watching";
   let openItem = null; // anime mostrato nella scheda
+  let showOriginal = null; // id dell'anime di cui mostrare la descrizione originale (inglese)
+  let pendingDetailRender = false; // scheda da ridisegnare appena finisci di scrivere la nota
 
   function load() {
     try {
@@ -236,7 +238,6 @@
       if (!match) return;
       item.alId = match.alId;
     }
-    if (item.seasons && item.synopsis !== undefined) return;
     const n = item.alId % db.shards;
     if (!shardCache.has(n)) {
       shardCache.set(
@@ -249,10 +250,19 @@
     }
     const d = (await shardCache.get(n))[item.alId];
     if (!d) return;
-    if (!item.synopsis) item.synopsis = d[0];
+    const before = JSON.stringify([item.synopsis, item.synopsisEn, item.synIt, item.genres, item.seasons]);
+    if (d[3]) {
+      // descrizione tradotta in italiano (vedi scripts/translate.py); l'originale resta consultabile
+      item.synopsis = d[3];
+      item.synopsisEn = d[0];
+      item.synIt = true;
+    } else if (!item.synopsis) {
+      item.synopsis = d[0];
+    }
     if (!item.genres?.length) item.genres = d[1];
     item.seasons = d[2];
-    if (findItem(item.id) === item) save();
+    const changed = before !== JSON.stringify([item.synopsis, item.synopsisEn, item.synIt, item.genres, item.seasons]);
+    if (changed && findItem(item.id) === item) save();
   }
 
   let toastTimer;
@@ -461,6 +471,7 @@
             <h2 class="hero-title display">${esc(a.title)}</h2>
             <p class="hero-meta tnum">${esc(meta)}</p>
             ${a.episodes ? `<div class="bar"><i style="width:${pct(a)}%"></i></div>` : ""}
+            ${a.note ? `<p class="hero-note">${icon("pencil")}<span>${esc(a.note.split("\n")[0])}</span></p>` : ""}
           </div>
           <div class="hero-actions">
             ${finished ? "" : `<button class="btn btn-primary" data-hero-plus>${icon("check")}Ho visto l'ep. ${a.ep + 1}</button>`}
@@ -506,7 +517,7 @@
             <img class="cover" src="${esc(cover(a))}" data-t="${esc(a.title)}" alt="" loading="lazy">
             ${corner}${bar}
           </div>
-          <div class="info"><div class="title">${esc(a.title)}</div><div class="sub">${esc(sub)}</div></div>
+          <div class="info"><div class="title">${esc(a.title)}</div><div class="sub">${esc(sub)}${a.note ? icon("pencil", "note-ic") : ""}</div></div>
         </button>`;
       })
       .join("");
@@ -514,6 +525,12 @@
 
   // ---------- Scheda anime ----------
   function renderDetail() {
+    // mentre scrivi una nota la scheda non si ridisegna (perderesti la tastiera): lo fa dopo
+    if (document.activeElement && document.activeElement.id === "noteInput") {
+      pendingDetailRender = true;
+      return;
+    }
+    pendingDetailRender = false;
     const a = openItem;
     if (!a) return;
     const saved = findItem(a.id);
@@ -543,8 +560,16 @@
       : "";
 
     const loading = item.synopsis === undefined && item.alId;
-    const synopsis = item.synopsis || (loading ? "Caricamento della descrizione…" : "Nessuna descrizione disponibile.");
+    const translated = item.synIt && item.synopsisEn;
+    const showEn = translated && showOriginal === item.id;
+    const synopsis =
+      (showEn ? item.synopsisEn : item.synopsis) || (loading ? "Caricamento della descrizione…" : "Nessuna descrizione disponibile.");
     const long = synopsis.length > 280;
+    const synMeta = translated
+      ? `<p class="syn-meta">${showEn ? "Testo originale" : "Traduzione automatica"} · <button class="syn-toggle" id="synToggle">${
+          showEn ? "Mostra in italiano" : "Mostra l'originale"
+        }</button></p>`
+      : "";
     const wiki = item.url
       ? `<a class="wiki-link" href="${esc(item.url)}" target="_blank" rel="noopener">${icon("external")}Scheda completa su ${item.url.includes("anilist") ? "AniList" : "MyAnimeList"}</a>`
       : "";
@@ -599,13 +624,54 @@
         </div>
         ${episodes}
         ${saved ? timerButton(item) : ""}
+        ${saved ? notesSection(item) : ""}
         <p class="synopsis ${long ? "clamp" : ""}" id="synopsis">${esc(synopsis)}</p>
         ${long ? `<button class="more" id="moreBtn">Leggi tutto</button>` : ""}
+        ${synMeta}
         ${genres ? `<p class="genres">${esc(genres)}</p>` : ""}
         ${wiki}
         ${seasonsHtml}
         ${saved ? `<button class="remove-btn" id="removeBtn">${icon("trash")}Rimuovi dalla lista</button>` : ""}
       </div>`;
+    autosize($("#noteInput"));
+  }
+
+  // ---------- Note personali ----------
+  function notesSection(item) {
+    return `<section class="notes">
+        <div class="notes-head"><p class="eyebrow">Le tue note</p><span class="note-state" id="noteState">${
+          item.note ? `Salvata ${ago(item.noteAt || Date.now())}` : ""
+        }</span></div>
+        <textarea id="noteInput" class="note-input" rows="3" maxlength="5000" placeholder="Cosa ne pensi, a che punto sei, chi te l'ha consigliato…">${esc(item.note || "")}</textarea>
+      </section>`;
+  }
+
+  // la casella cresce con il testo
+  function autosize(ta) {
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = Math.max(ta.scrollHeight + 2, 88) + "px";
+  }
+
+  let noteTimer = null;
+  function saveNote(id, text) {
+    clearTimeout(noteTimer);
+    noteTimer = null;
+    const item = findItem(id); // sempre l'oggetto attuale (una sincronizzazione può averlo sostituito)
+    if (!item) return;
+    const value = String(text).replace(/\s+$/, "").slice(0, 5000);
+    if ((item.note || "") !== value) {
+      item.note = value;
+      item.noteAt = Date.now(); // le note si sincronizzano con la loro data (vince l'ultima scritta)
+      save();
+    }
+    const state = $("#noteState");
+    if (state) state.textContent = item.note ? "Salvata" : "";
+  }
+  // salva subito la nota in sospeso (per esempio se esci dall'app mentre scrivi)
+  function flushNote() {
+    const ta = $("#noteInput");
+    if (noteTimer && ta && openItem) saveNote(openItem.id, ta.value);
   }
 
   function showDetail(anime) {
@@ -806,7 +872,28 @@
     if (card) showDetail(findItem(card.dataset.open));
   });
 
+  $("#detail").addEventListener("input", (e) => {
+    if (e.target.id !== "noteInput" || !openItem) return;
+    autosize(e.target);
+    const id = openItem.id;
+    const state = $("#noteState");
+    if (state) state.textContent = "…";
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => saveNote(id, e.target.value), 700);
+  });
+  $("#detail").addEventListener("focusout", (e) => {
+    if (e.target.id !== "noteInput" || !openItem) return;
+    saveNote(openItem.id, e.target.value);
+    renderGrid(); // aggiorna la matita sul poster e la nota in "Continua a guardare"
+    // ridisegno rimandato: aspetta che un eventuale tocco su un pulsante arrivi a destinazione
+    if (pendingDetailRender) setTimeout(() => pendingDetailRender && renderDetail(), 350);
+  });
+
   $("#detail").addEventListener("click", (e) => {
+    if (e.target.closest("#synToggle")) {
+      showOriginal = showOriginal === openItem.id ? null : openItem.id;
+      return renderDetail();
+    }
     if (e.target.closest("#timerDetail")) {
       if (session) openSessionSheet(false);
       else startSession(findItem(openItem.id));
@@ -1146,6 +1233,7 @@
   }
 
   function onHide() {
+    flushNote();
     if (session && !session.hiddenAt) {
       session.hiddenAt = Date.now();
       saveSession();
