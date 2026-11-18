@@ -4,37 +4,77 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Animeteca</title>
-  <meta name="description" content="Tieni traccia degli anime da vedere, in corso e guardati.">
-  <meta name="theme-color" content="#14111f">
+  <meta name="description" content="La tua lista di anime: in corso, da vedere, visti.">
+  <meta name="theme-color" content="#0b0b0c">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Animeteca">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="preload" href="fonts/archivo.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- Icone (disegnate su una griglia di 24 px, tratto 1,8) -->
+  <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="display:none">
+    <symbol id="logo-mark" viewBox="0 0 22 26">
+      <path fill="currentColor" d="M3 0h16a3 3 0 0 1 3 3v21.1a1.2 1.2 0 0 1-1.86 1L11 19.4l-9.14 5.7A1.2 1.2 0 0 1 0 24.1V3a3 3 0 0 1 3-3Z"/>
+      <path fill="#0b0b0c" d="M8.4 6.4v7.9l6.7-3.95Z"/>
+    </symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M5 20v-7M12 20V5M19 20v-10"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.5" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6.5 6.5 11 11m0-11-11 11"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 2M9.5 2.5h5M19 6l1.5-1.5"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.8v12.4a.8.8 0 0 0 1.2.7l10-6.2a.8.8 0 0 0 0-1.4l-10-6.2A.8.8 0 0 0 8 5.8Z"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M7 3.5h10a1 1 0 0 1 1 1v16l-6-4.2-6 4.2v-16a1 1 0 0 1 1-1Z"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4.5 19.5h4l10-10a2.1 2.1 0 0 0-3-3l-10 10Zm9-11.5 3 3"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M10 11v6m4-6v6M6.5 7l.8 12.1a1 1 0 0 0 1 .9h7.4a1 1 0 0 0 1-.9L17.5 7m-8 0V4.5h5V7"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9Z"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9.5 6 6 6-6 6"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9.5 6 6 6-6"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4.5h5.5V10m0-5.5L11 13m6.5 1v4.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1H10"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c1.2-3.6 4.1-5.5 7.5-5.5s6.3 1.9 7.5 5.5"/></symbol>
+    <symbol id="i-sync" viewBox="0 0 24 24"><path d="M19.5 10.5A7.5 7.5 0 0 0 6 7.2L4.5 9m0-4.5V9H9m-4.5 4.5A7.5 7.5 0 0 0 18 16.8l1.5-1.8m0 4.5V15H15"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14.5 4.5h3a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-3M10 16.5 5.5 12 10 7.5M5.5 12H15"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 19.5h14"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 19.5h14"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 2.8 19.5h18.4Z"/><path d="M12 10v4.5m0 2.8v.2"/></symbol>
+  </svg>
+
   <header class="topbar">
-    <h1 class="logo">Anime<span>teca</span></h1>
+    <a class="brand" href="./" aria-label="Animeteca">
+      <svg class="brand-mark" aria-hidden="true"><use href="#logo-mark"></use></svg>
+      <span class="brand-name">animeteca</span>
+    </a>
     <div class="top-actions">
-      <button class="icon-btn" id="statsBtn" aria-label="Statistiche">📊</button>
-      <button class="icon-btn" id="menuBtn" aria-label="Menu">⋯</button>
+      <button class="search-btn" id="addBtn" aria-label="Cerca un anime">
+        <svg class="ic" aria-hidden="true"><use href="#i-search"></use></svg><span>Cerca</span>
+      </button>
+      <button class="icon-btn" id="statsBtn" aria-label="Statistiche">
+        <svg class="ic" aria-hidden="true"><use href="#i-chart"></use></svg>
+      </button>
+      <button class="icon-btn" id="menuBtn" aria-label="Account e impostazioni">
+        <svg class="ic" aria-hidden="true"><use href="#i-more"></use></svg>
+      </button>
     </div>
   </header>
 
   <nav class="tabs" role="tablist">
-    <button role="tab" data-tab="watching" class="tab active">In corso <b data-count="watching">0</b></button>
-    <button role="tab" data-tab="plan" class="tab">Da vedere <b data-count="plan">0</b></button>
-    <button role="tab" data-tab="done" class="tab">Guardati <b data-count="done">0</b></button>
+    <button role="tab" data-tab="watching" class="tab active">In corso<b data-count="watching">0</b></button>
+    <button role="tab" data-tab="plan" class="tab">Da vedere<b data-count="plan">0</b></button>
+    <button role="tab" data-tab="done" class="tab">Visti<b data-count="done">0</b></button>
   </nav>
 
+  <div id="hero"></div>
   <main id="grid" class="grid" aria-live="polite"></main>
 
   <div class="timer-bar" id="timerBar" role="status" hidden></div>
-
-  <button class="fab" id="addBtn" aria-label="Aggiungi anime">＋</button>
 
   <!-- Ricerca -->
   <section class="sheet" id="searchSheet" aria-hidden="true">
@@ -42,14 +82,17 @@
     <div class="sheet-panel">
       <div class="sheet-handle"></div>
       <div class="search-bar">
-        <input id="searchInput" type="search" placeholder="Cerca un anime…" autocomplete="off" enterkeyhint="search">
-        <button class="text-btn" data-close>Chiudi</button>
+        <label class="search-field">
+          <svg class="ic" aria-hidden="true"><use href="#i-search"></use></svg>
+          <input id="searchInput" type="search" placeholder="Titolo dell'anime" autocomplete="off" enterkeyhint="search">
+        </label>
+        <button class="text-btn" data-close>Annulla</button>
       </div>
       <div id="searchResults" class="results"></div>
     </div>
   </section>
 
-  <!-- Scheda anime (la "finestra" del disegno) -->
+  <!-- Scheda anime -->
   <section class="sheet" id="detailSheet" aria-hidden="true">
     <div class="sheet-backdrop" data-close></div>
     <div class="sheet-panel detail-panel" id="detail"></div>
@@ -60,7 +103,10 @@
     <div class="sheet-backdrop" data-close></div>
     <div class="sheet-panel">
       <div class="sheet-handle"></div>
-      <div class="stats-head"><h2>Il tuo tempo sugli anime</h2><button class="text-btn" data-close>Chiudi</button></div>
+      <div class="sheet-head">
+        <h2 class="display">Statistiche</h2>
+        <button class="sheet-close" data-close aria-label="Chiudi"><svg class="ic" aria-hidden="true"><use href="#i-close"></use></svg></button>
+      </div>
       <div id="stats"></div>
     </div>
   </section>
@@ -79,12 +125,21 @@
     <div class="sheet-backdrop" data-close></div>
     <div class="sheet-panel menu-panel">
       <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h2 class="display">Account e dati</h2>
+        <button class="sheet-close" data-close aria-label="Chiudi"><svg class="ic" aria-hidden="true"><use href="#i-close"></use></svg></button>
+      </div>
       <div id="accountBox"></div>
-      <button class="menu-item" id="exportBtn">⬇️ Esporta backup</button>
-      <label class="menu-item">⬆️ Importa backup<input type="file" id="importInput" accept="application/json" hidden></label>
+      <button class="menu-item" id="exportBtn">
+        <svg class="ic" aria-hidden="true"><use href="#i-download"></use></svg>Esporta backup
+      </button>
+      <label class="menu-item">
+        <svg class="ic" aria-hidden="true"><use href="#i-upload"></use></svg>Importa backup
+        <input type="file" id="importInput" accept="application/json" hidden>
+      </label>
       <p class="menu-note" id="storageNote">I dati restano salvati solo su questo dispositivo. Fai ogni tanto un backup.</p>
       <p class="menu-note" id="dbInfo"></p>
-      <p class="menu-note">Versione 12</p>
+      <p class="menu-note">Animeteca · versione 13</p>
     </div>
   </section>
 

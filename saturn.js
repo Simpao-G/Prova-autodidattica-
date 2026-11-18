@@ -46,15 +46,22 @@
       var root = box.attachShadow ? box.attachShadow({ mode: "open" }) : box;
       root.innerHTML =
         "<style>" +
-        ".b{position:fixed;left:12px;bottom:12px;z-index:2147483647;display:flex;align-items:center;gap:8px;" +
-        "padding:8px 8px 8px 12px;border-radius:16px;background:rgb(36,31,58);color:rgb(243,240,255);" +
-        "border:1px solid rgb(74,222,128);box-shadow:0 8px 24px rgba(0,0,0,.5);" +
-        "font:600 14px -apple-system,BlinkMacSystemFont,system-ui,sans-serif}" +
-        ".d{width:9px;height:9px;border-radius:50px;background:rgb(74,222,128)}" +
-        "button{border:0;border-radius:11px;padding:7px 11px;font:700 13px -apple-system,system-ui,sans-serif;cursor:pointer}" +
-        ".s{background:rgb(74,222,128);color:rgb(16,37,26)}.x{background:rgba(255,255,255,.12);color:rgb(243,240,255)}" +
-        "</style><div class=b><span class=d></span><span class=t></span>" +
-        "<button class=s>Invia</button><button class=x>\u2715</button></div>";
+        ".b{position:fixed;left:12px;bottom:12px;z-index:2147483647;display:flex;align-items:center;gap:10px;" +
+        "padding:7px 7px 7px 12px;border-radius:12px;background:rgb(20,20,22);color:rgb(244,243,239);" +
+        "border:1px solid rgba(255,255,255,.16);box-shadow:0 10px 28px rgba(0,0,0,.5);" +
+        "font:500 13px -apple-system,BlinkMacSystemFont,system-ui,sans-serif;transition:transform .2s}" +
+        ".m{width:12px;height:15px;flex:none}" +
+        ".t{font-variant-numeric:tabular-nums;white-space:nowrap}" +
+        ".d{width:7px;height:7px;border-radius:50px;background:rgb(245,197,66);flex:none}" +
+        "button{border:0;border-radius:8px;height:32px;padding:0 12px;font:700 13px -apple-system,system-ui,sans-serif;cursor:pointer}" +
+        ".s{background:rgb(245,197,66);color:rgb(23,20,10)}" +
+        ".x{width:32px;padding:0;display:grid;place-items:center;background:none;color:rgb(168,167,161)}" +
+        "</style><div class=b>" +
+        "<svg class=m viewBox='0 0 22 26' aria-hidden=true><path fill='rgb(245,197,66)' d='M3 0h16a3 3 0 0 1 3 3v21.1a1.2 1.2 0 0 1-1.86 1L11 19.4l-9.14 5.7A1.2 1.2 0 0 1 0 24.1V3a3 3 0 0 1 3-3Z'/>" +
+        "<path fill='rgb(20,20,22)' d='M8.4 6.4v7.9l6.7-3.95Z'/></svg>" +
+        "<span class=d></span><span class=t></span>" +
+        "<button class=s>Invia</button>" +
+        "<button class=x aria-label=Chiudi><svg width=16 height=16 viewBox='0 0 24 24' fill=none stroke=currentColor stroke-width=2 stroke-linecap=round aria-hidden=true><path d='m6.5 6.5 11 11m0-11-11 11'/></svg></button></div>";
       (document.body || document.documentElement).appendChild(box);
       var bar = root.querySelector(".b");
       var label = root.querySelector(".t");
@@ -73,7 +80,7 @@
         } else {
           dot.style.opacity = "0.3";
         }
-        label.textContent = "\u23F1 AnimeSaturn \u00B7 oggi " + fmt(o[k] || 0);
+        label.textContent = "AnimeSaturn \u00B7 oggi " + fmt(o[k] || 0);
       };
       var timer = setInterval(tick, 1000);
       tick();
@@ -94,7 +101,7 @@
       };
       window.__animeteca = {
         flash: function () {
-          bar.style.transform = "scale(1.08)";
+          bar.style.transform = "scale(1.06)";
           setTimeout(function () {
             bar.style.transform = "";
           }, 250);

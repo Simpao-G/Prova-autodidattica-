@@ -9,6 +9,13 @@ App per il telefono per tenere traccia dei tuoi anime:
 Cerchi un anime per nome e l'app mostra **copertina, titolo, descrizione, episodi, anno, voto, generi**
 e l'elenco di **stagioni e film** della serie. Se un anime non si trova lo puoi aggiungere a mano.
 
+## Grafica
+
+Stile "streaming notturno": nero e grafite, un solo colore acceso (giallo `#f5c542`) per ciò che
+conta, titoli in [Archivo](https://github.com/Omnibus-Type/Archivo) stretto (licenza OFL, incluso in
+`fonts/` così funziona anche offline), icone disegnate a mano in `index.html` e logo a nastro
+segnalibro. Colori e misure sono variabili all'inizio di `style.css`.
+
 ## Da dove arrivano gli anime
 
 Il database è **dentro l'app** (cartella `data/`), così la ricerca è istantanea, funziona offline e

@@ -12,11 +12,13 @@
   const LOG_KEY = "animeteca.log.v1";
   const REAL_KEY = "animeteca.real.v1";
   const DELETED_KEY = "animeteca.deleted.v1"; // cosa hai cancellato (serve alla sincronizzazione)
+  // In ordine di "vita" di una serie: da vedere -> in corso -> visto
   const STATUS = {
-    watching: "In corso",
     plan: "Da vedere",
-    done: "Guardato",
+    watching: "In corso",
+    done: "Visto",
   };
+  const TAB_LABEL = { watching: "In corso", plan: "Da vedere", done: "Visti" };
 
   // ---------- Stato ----------
   let list = load();
@@ -35,7 +37,7 @@
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
     } catch {
-      toast("⚠️ Impossibile salvare i dati");
+      toast("Memoria piena: impossibile salvare");
     }
     scheduleSync();
   }
@@ -74,7 +76,7 @@
     try {
       localStorage.setItem(REAL_KEY, JSON.stringify(real));
     } catch {
-      toast("⚠️ Impossibile salvare i dati");
+      toast("Memoria piena: impossibile salvare");
     }
     scheduleSync();
   }
@@ -102,9 +104,42 @@
   const esc = (s) =>
     String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+  // Icone disegnate in index.html (<symbol id="i-...">)
+  const icon = (name, cls = "") => `<svg class="ic${cls ? " " + cls : ""}" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
+
+  // Generi di AniList / MyAnimeList in italiano
+  const GENRE_IT = {
+    Action: "Azione",
+    Adventure: "Avventura",
+    Comedy: "Commedia",
+    Drama: "Drammatico",
+    Fantasy: "Fantasy",
+    Horror: "Horror",
+    "Mahou Shoujo": "Majokko",
+    Mecha: "Mecha",
+    Music: "Musica",
+    Mystery: "Mistero",
+    Psychological: "Psicologico",
+    Romance: "Sentimentale",
+    "Sci-Fi": "Fantascienza",
+    "Slice of Life": "Slice of life",
+    Sports: "Sport",
+    Supernatural: "Soprannaturale",
+    Thriller: "Thriller",
+    Ecchi: "Ecchi",
+    Suspense: "Suspense",
+    "Award Winning": "Premiato",
+    "Avant Garde": "Sperimentale",
+    Gourmet: "Cucina",
+    "Boys Love": "Boys love",
+    "Girls Love": "Girls love",
+  };
+  const genreLabel = (g) => GENRE_IT[g] || g;
+
+  // Copertina di riserva: grafite con le iniziali
   function placeholder(title) {
     const letters = (title || "?").trim().slice(0, 2).toUpperCase();
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5c9a"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs><rect width="200" height="300" fill="url(#g)"/><text x="100" y="170" font-family="sans-serif" font-size="72" font-weight="800" fill="#fff" text-anchor="middle">${esc(letters)}</text></svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300"><rect width="200" height="300" fill="#1b1b1e"/><rect x="0" y="292" width="200" height="8" fill="#f5c542"/><text x="100" y="168" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="64" font-weight="800" fill="#4a4a4f" text-anchor="middle" letter-spacing="-2">${esc(letters)}</text></svg>`;
     return "data:image/svg+xml," + encodeURIComponent(svg);
   }
   const cover = (a) => a.image || placeholder(a.title);
@@ -357,7 +392,7 @@
     if (status === "done" && item.episodes) item.ep = item.episodes;
     item.updatedAt = Date.now();
     save();
-    toast(isNew ? `Aggiunto a "${STATUS[status]}"` : `Spostato in "${STATUS[status]}"`);
+    toast(isNew ? `Aggiunto a ${TAB_LABEL[status]}` : `Spostato in ${TAB_LABEL[status]}`);
     openItem = item;
     renderAll();
   }
@@ -372,7 +407,7 @@
     if (ep > 0 && item.status === "plan") item.status = "watching";
     if (item.episodes && ep === item.episodes && item.status !== "done") {
       item.status = "done";
-      toast("Completato! 🎉");
+      toast(`Serie finita: ${item.title}`);
     } else if (item.status === "done" && item.episodes && ep < item.episodes) {
       item.status = "watching";
     }
@@ -399,37 +434,79 @@
     }
   }
 
+  // "Continua a guardare": l'anime in corso toccato più di recente, in grande
+  function renderHero() {
+    const box = $("#hero");
+    const a =
+      currentTab === "watching"
+        ? list.filter((x) => x.status === "watching").sort((x, y) => (y.updatedAt || 0) - (x.updatedAt || 0))[0]
+        : null;
+    if (!a) {
+      box.innerHTML = "";
+      return;
+    }
+    const minutes = a.duration || db?.byId.get(a.id)?.duration;
+    const meta = [a.episodes ? `Ep. ${a.ep} di ${a.episodes}` : `Ep. ${a.ep}`, minutes && `${minutes} min a episodio`]
+      .filter(Boolean)
+      .join(" · ");
+    const finished = a.episodes && a.ep >= a.episodes;
+    const timerOn = session && session.id === a.id;
+    box.innerHTML = `
+      <section class="hero-cw" data-hero="${esc(a.id)}">
+        <img class="hero-bg" src="${esc(cover(a))}" data-t="${esc(a.title)}" alt="">
+        <div class="hero-inner">
+          <img class="hero-poster" src="${esc(cover(a))}" data-t="${esc(a.title)}" alt="">
+          <div class="hero-text">
+            <p class="eyebrow">Continua a guardare</p>
+            <h2 class="hero-title display">${esc(a.title)}</h2>
+            <p class="hero-meta tnum">${esc(meta)}</p>
+            ${a.episodes ? `<div class="bar"><i style="width:${pct(a)}%"></i></div>` : ""}
+          </div>
+          <div class="hero-actions">
+            ${finished ? "" : `<button class="btn btn-primary" data-hero-plus>${icon("check")}Ho visto l'ep. ${a.ep + 1}</button>`}
+            <button class="btn btn-ghost" data-hero-timer>${icon("timer")}${timerOn ? "Timer attivo" : "Timer"}</button>
+          </div>
+        </div>
+      </section>
+      <p class="eyebrow section-label">Tutti in corso</p>`;
+  }
+
   function renderGrid() {
+    renderHero();
     const grid = $("#grid");
     const items = list
       .filter((a) => a.status === currentTab)
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
     if (!items.length) {
-      const msg = {
-        watching: ["📺", "Nessun anime in corso.", "Aggiungine uno con il pulsante ＋"],
-        plan: ["📝", "La lista dei desideri è vuota.", "Cerca un anime e premi “Da vedere”"],
-        done: ["🏆", "Ancora nessun anime finito.", "Forza, puoi farcela!"],
+      const [ic, title, text] = {
+        watching: ["play", "Niente in corso", "Quando inizi una serie, segnala come “In corso”: la ritrovi qui, con l'episodio a cui sei arrivato."],
+        plan: ["bookmark", "Nessuna serie da vedere", "Salva qui le serie che vuoi iniziare, così non te le dimentichi."],
+        done: ["check", "Nessuna serie finita", "Le serie che completi arrivano qui, con tutti gli episodi visti."],
       }[currentTab];
-      grid.innerHTML = `<div class="empty"><div class="big">${msg[0]}</div><p><strong>${msg[1]}</strong></p><p>${msg[2]}</p></div>`;
+      grid.innerHTML = `<div class="empty">${icon(ic)}<h3 class="display">${title}</h3><p>${text}</p>
+        <button class="btn btn-ghost" data-action="search">${icon("search")}Cerca un anime</button></div>`;
       return;
     }
 
     grid.innerHTML = items
       .map((a) => {
         let corner = "";
+        let bar = "";
         let sub = [a.type, a.year].filter(Boolean).join(" · ");
         if (a.status === "watching") {
-          corner = `<span class="quick-plus" role="button" data-plus="${esc(a.id)}" aria-label="Episodio successivo">+1</span>`;
+          corner = `<span class="quick-plus" role="button" data-plus="${esc(a.id)}" aria-label="Segna l'episodio successivo">+1</span>`;
           sub = `Ep. ${epLabel(a)}`;
+          if (a.episodes) bar = `<div class="bar"><i style="width:${pct(a)}%"></i></div>`;
         } else if (a.status === "done") {
-          corner = `<span class="badge-done">✓ Visto</span>`;
+          corner = `<span class="badge-done" aria-label="Visto">${icon("check")}</span>`;
         }
-        const bar = a.status === "watching" && a.episodes ? `<div class="progress"><i style="width:${pct(a)}%"></i></div>` : "";
         return `<button class="card" data-open="${esc(a.id)}">
-          <img class="cover" src="${esc(cover(a))}" data-t="${esc(a.title)}" alt="" loading="lazy">
-          ${corner}
-          <div class="info"><div class="title">${esc(a.title)}</div><div class="sub">${esc(sub)}</div>${bar}</div>
+          <div class="poster-wrap">
+            <img class="cover" src="${esc(cover(a))}" data-t="${esc(a.title)}" alt="" loading="lazy">
+            ${corner}${bar}
+          </div>
+          <div class="info"><div class="title">${esc(a.title)}</div><div class="sub">${esc(sub)}</div></div>
         </button>`;
       })
       .join("");
@@ -443,36 +520,36 @@
     const item = saved || a;
     const status = saved?.status;
 
-    const chips = [
-      item.type && `<span class="chip">${esc(item.type)}</span>`,
-      item.year && `<span class="chip">${esc(item.year)}</span>`,
-      item.episodes && `<span class="chip">${esc(item.episodes)} episodi</span>`,
-      item.score && `<span class="chip star">★ ${esc(item.score)}</span>`,
-      ...(item.genres || []).map((g) => `<span class="chip">${esc(g)}</span>`),
-    ].filter(Boolean).join("");
+    const minutes = item.duration || db?.byId.get(item.id)?.duration;
+    const meta = [item.type, item.year, item.episodes && `${item.episodes} ep.`, minutes && `${minutes} min`]
+      .filter(Boolean)
+      .map((x) => `<span>${esc(x)}</span>`)
+      .join("");
+    const score = item.score ? `<span class="score">${icon("star", "fill")}${esc(String(item.score).replace(".", ","))}</span>` : "";
+    const genres = (item.genres || []).map(genreLabel).join(" · ");
 
     const episodes = saved
       ? `<div class="episodes">
           <div>
-            <div class="label">Episodio a cui sei arrivato</div>
-            <div class="count">${esc(item.ep)}${item.episodes ? ` <small>/ ${esc(item.episodes)}</small>` : ""}</div>
-            ${item.episodes ? `<div class="progress"><i style="width:${pct(item)}%"></i></div>` : ""}
+            <div class="label">Episodio</div>
+            <div class="count display">${esc(item.ep)}${item.episodes ? `<small> / ${esc(item.episodes)}</small>` : ""}</div>
+            ${item.episodes ? `<div class="bar"><i style="width:${pct(item)}%"></i></div>` : ""}
           </div>
           <div class="stepper">
-            <button data-ep="-1" aria-label="Episodio precedente">−</button>
-            <button data-ep="1" class="plus" aria-label="Episodio successivo">＋</button>
+            <button data-ep="-1" aria-label="Episodio precedente">${icon("minus")}</button>
+            <button data-ep="1" class="plus" aria-label="Episodio successivo">${icon("plus")}</button>
           </div>
         </div>`
       : "";
 
     const loading = item.synopsis === undefined && item.alId;
-    const synopsis = item.synopsis || (loading ? "Caricamento descrizione…" : "Nessuna descrizione disponibile.");
+    const synopsis = item.synopsis || (loading ? "Caricamento della descrizione…" : "Nessuna descrizione disponibile.");
     const long = synopsis.length > 280;
     const wiki = item.url
-      ? `<a class="wiki-link" href="${esc(item.url)}" target="_blank" rel="noopener">Apri su ${item.url.includes("anilist") ? "AniList" : "MyAnimeList"} ↗</a>`
+      ? `<a class="wiki-link" href="${esc(item.url)}" target="_blank" rel="noopener">${icon("external")}Scheda completa su ${item.url.includes("anilist") ? "AniList" : "MyAnimeList"}</a>`
       : "";
 
-    // Stagioni e film della stessa serie
+    // Stagioni e film della stessa serie, da sfogliare
     let seasonsHtml = "";
     const chain = db && item.seasons?.length > 1 ? item.seasons.map((al) => db.byAl.get(al)).filter(Boolean) : [];
     if (chain.length > 1) {
@@ -492,36 +569,42 @@
           const sub = [label, s.year, s.episodes && `${s.episodes} ep.`].filter(Boolean).join(" · ");
           return `<button class="season ${here ? "current" : ""}" data-season="${s.alId}" ${here ? "disabled" : ""}>
             <img src="${esc(cover(s))}" data-t="${esc(s.title)}" alt="" loading="lazy">
-            <div class="s-text"><div class="s-title">${esc(s.title)}</div><div class="s-sub">${esc(sub)}</div></div>
-            ${here ? `<span class="s-tag">Questa</span>` : mine ? `<span class="s-tag ok">✓ ${esc(STATUS[mine.status])}</span>` : ""}
+            <div class="s-title">${esc(s.title)}</div>
+            <div class="s-sub">${esc(sub)}</div>
+            ${here ? `<span class="s-tag">Questa</span>` : mine ? `<span class="s-tag ok">${esc(STATUS[mine.status])}</span>` : ""}
           </button>`;
         })
         .join("");
-      seasonsHtml = `<h3 class="section-title">Stagioni e film</h3><p class="season-sum">${esc(summary)}</p><div class="seasons">${rows}</div>`;
+      seasonsHtml = `<p class="eyebrow section-title">Stagioni e film</p><p class="season-sum">${esc(summary)}</p><div class="seasons">${rows}</div>`;
     }
 
     $("#detail").innerHTML = `
       <div class="hero">
         <img class="bg" src="${esc(cover(item))}" data-t="${esc(item.title)}" alt="">
+        <button class="close" data-close aria-label="Chiudi">${icon("close")}</button>
+      </div>
+      <div class="detail-head">
         <img class="poster" src="${esc(cover(item))}" data-t="${esc(item.title)}" alt="Copertina di ${esc(item.title)}">
-        <button class="close" data-close aria-label="Chiudi">✕</button>
+        <div class="head-text">
+          <h2 class="detail-title display">${esc(item.title)}</h2>
+          ${item.altTitle ? `<p class="alt-title">${esc(item.altTitle)}</p>` : ""}
+          <div class="meta-line">${meta}${score}</div>
+        </div>
       </div>
       <div class="detail-body">
-        <h2 class="detail-title"><mark>${esc(item.title)}</mark></h2>
-        ${item.altTitle ? `<div style="text-align:center;color:var(--muted);font-size:13px">${esc(item.altTitle)}</div>` : ""}
-        <div class="chips">${chips}</div>
-        ${episodes}
-        ${saved ? timerButton(item) : ""}
-        <p class="synopsis ${long ? "clamp" : ""}" id="synopsis">${esc(synopsis)}</p>
-        ${long ? `<button class="more" id="moreBtn">Leggi tutto</button><br>` : ""}
-        ${wiki}
-        <div class="status-row">
+        <div class="status-row" role="group" aria-label="Stato">
           ${Object.entries(STATUS)
             .map(([key, label]) => `<button class="status-btn ${status === key ? "active" : ""}" data-status="${key}">${label}</button>`)
             .join("")}
         </div>
+        ${episodes}
+        ${saved ? timerButton(item) : ""}
+        <p class="synopsis ${long ? "clamp" : ""}" id="synopsis">${esc(synopsis)}</p>
+        ${long ? `<button class="more" id="moreBtn">Leggi tutto</button>` : ""}
+        ${genres ? `<p class="genres">${esc(genres)}</p>` : ""}
+        ${wiki}
         ${seasonsHtml}
-        ${saved ? `<button class="remove-btn" id="removeBtn">Rimuovi dalla lista</button>` : ""}
+        ${saved ? `<button class="remove-btn" id="removeBtn">${icon("trash")}Rimuovi dalla lista</button>` : ""}
       </div>`;
   }
 
@@ -583,13 +666,13 @@
           const sub = [r.type, r.year, r.episodes && `${r.episodes} ep.`].filter(Boolean).join(" · ");
           return `<button class="result" data-result="${i}">
             <img src="${esc(cover(r))}" data-t="${esc(r.title)}" alt="" loading="lazy">
-            <div><div class="r-title">${esc(r.title)}</div><div class="r-sub">${esc(sub)}</div></div>
-            ${saved ? `<span class="r-tag">✓ ${esc(STATUS[saved.status])}</span>` : ""}
+            <div class="r-main"><div class="r-title">${esc(r.title)}</div><div class="r-sub">${esc(sub)}</div></div>
+            ${saved ? `<span class="r-tag">${esc(STATUS[saved.status])}</span>` : icon("chevron-right", "chev")}
           </button>`;
         })
         .join("") + manualButton();
   }
-  const manualButton = () => `<button class="manual-btn" id="manualBtn">Non lo trovi? Aggiungilo a mano</button>`;
+  const manualButton = () => `<button class="manual-btn" id="manualBtn">${icon("plus")}Non lo trovi? Aggiungilo a mano</button>`;
 
   async function search(q) {
     const box = $("#searchResults");
@@ -690,7 +773,25 @@
     })
   );
 
+  $("#hero").addEventListener("click", (e) => {
+    const hero = e.target.closest("[data-hero]");
+    const item = hero && findItem(hero.dataset.hero);
+    if (!item) return;
+    if (e.target.closest("[data-hero-plus]")) {
+      setEpisode(item, item.ep + 1);
+      if (item.status === "watching") toast(`${item.title} · ep. ${epLabel(item)}`);
+      return;
+    }
+    if (e.target.closest("[data-hero-timer]")) {
+      if (session) openSessionSheet(false);
+      else startSession(item);
+      return renderHero();
+    }
+    showDetail(item);
+  });
+
   $("#grid").addEventListener("click", (e) => {
+    if (e.target.closest('[data-action="search"]')) return $("#addBtn").click();
     const plus = e.target.closest("[data-plus]");
     if (plus) {
       e.stopPropagation();
@@ -744,7 +845,7 @@
   const localDate = (d = new Date()) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-  // Riquadro "tempo reale": sessioni del timer + eventuali aggiunte a mano
+  // Riquadro "tempo reale": sessioni del timer + segnalibro + aggiunte a mano
   let manualOpen = false; // la sezione "a mano" resta aperta dopo un inserimento
   let bmOpen = false;
   function realSection() {
@@ -754,39 +855,39 @@
     const total = real.reduce((n, e) => n + e.m, 0);
     const recent = [...real].sort((a, b) => b.t - a.t).slice(0, 6);
     const day = (t) => new Date(t).toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" });
+    const srcIcon = (s) => icon(s === "timer" ? "timer" : s === "saturn" ? "bookmark" : "pencil");
     return `
-      <h3 class="stats-sec">Tempo reale di visione</h3>
-      <div class="big-stat real"><div class="num">${esc(fmtTime(total))}</div><div class="cap">${
+      <p class="eyebrow stats-sec">Tempo reale</p>
+      <div class="big-stat real"><div class="num display">${esc(fmtTime(total))}</div><div class="cap">${
         real.length
           ? `${esc(fmtTime(sum(t0)))} oggi · ${esc(fmtTime(sum(t0 - 6 * 86400000)))} negli ultimi 7 giorni`
-          : "misurato con il timer ⏱ o il segnalibro 🪐"
+          : "Misurato con il timer o con il segnalibro di AnimeSaturn."
       }</div></div>
       ${
         session
-          ? `<button class="timer-btn on" id="timerStats">⏱ Timer attivo${session.title ? ` · ${esc(session.title)}` : ""} · Fine visione</button>`
-          : `<button class="timer-btn" id="timerStats">⏱ Avvia il timer</button>`
+          ? `<button class="timer-btn on" id="timerStats">${icon("timer")}Timer attivo${session.title ? ` · ${esc(session.title)}` : ""}</button>`
+          : `<button class="timer-btn" id="timerStats">${icon("timer")}Avvia il timer</button>`
       }
       ${recent
         .map(
-          (e) => `<div class="real-row"><span>${e.s === "timer" ? "⏱" : e.s === "saturn" ? "🪐" : "✍️"} ${esc(day(e.t))}${e.title ? ` · ${esc(e.title)}` : ""}</span><b>${esc(fmtTime(e.m))}</b><button data-real-del="${e.t}" aria-label="Elimina">✕</button></div>`
+          (e) => `<div class="real-row">${srcIcon(e.s)}<span>${esc(day(e.t))}${e.title ? ` · ${esc(e.title)}` : ""}</span><b>${esc(fmtTime(e.m))}</b><button data-real-del="${e.t}" aria-label="Elimina">${icon("close")}</button></div>`
         )
         .join("")}
       <details class="manual bm" ${bmOpen ? "open" : ""}>
-        <summary>🪐 Tempo automatico su AnimeSaturn</summary>
+        <summary>Tempo automatico su AnimeSaturn${icon("chevron-down", "chev")}</summary>
         <ol class="steps">
           <li>Tocca <b>Copia segnalibro</b> qui sotto.</li>
           <li>In Brave salva nei segnalibri una pagina qualsiasi.</li>
-          <li>Apri i <b>Segnalibri</b>, tieni premuto quello nuovo e scegli <b>Modifica</b>: come nome scrivi <b>⏱ Anime</b>, nell'indirizzo cancella tutto e incolla.</li>
-          <li>Su AnimeSaturn, quando inizi un episodio, apri i Segnalibri e tocca <b>⏱ Anime</b>: in basso compare un contatore che va solo mentre la pagina è aperta davanti a te. Se cambi episodio, toccalo di nuovo (il tempo già contato resta).</li>
-          <li>Quando vuoi, tocca <b>Invia</b> sul contatore: si apre l'Animeteca con il tempo aggiornato.</li>
+          <li>Apri i <b>Segnalibri</b>, tocca la matita e poi il segnalibro nuovo: come nome scrivi <b>Anime</b>, nell'indirizzo cancella tutto e incolla.</li>
+          <li>Su AnimeSaturn, quando inizi un episodio, apri i Segnalibri e tocca <b>Anime</b>: in basso compare un contatore che va solo mentre la pagina è davanti a te.</li>
+          <li>Quando vuoi, tocca <b>Invia</b> sul contatore: il tempo arriva qui.</li>
         </ol>
-        <button type="button" class="real-add" id="copyBm">Copia segnalibro</button>
+        <button type="button" class="real-add" id="copyBm">${icon("bookmark")}Copia segnalibro</button>
         <textarea class="bm-code" id="bmCode" readonly rows="3">${esc(bookmarkletCode())}</textarea>
         <button type="button" class="link-btn" id="copyBmLong">Brave non salva il segnalibro? Prova la versione lunga</button>
-        <p class="stats-note">Usa l'Animeteca in una scheda di Brave: se l'apri dall'icona sulla schermata Home, iPadOS le dà una memoria separata e il tempo inviato non arriva.</p>
       </details>
       <details class="manual" ${manualOpen ? "open" : ""}>
-        <summary>Aggiungi tempo a mano</summary>
+        <summary>Aggiungi tempo a mano${icon("chevron-down", "chev")}</summary>
         <form class="real-form" id="realForm">
           <label>Giorno<input type="date" name="day" value="${localDate()}" max="${localDate()}" required></label>
           <label>Ore<input type="number" name="h" min="0" max="24" inputmode="numeric" placeholder="0"></label>
@@ -794,7 +895,7 @@
           <button type="submit" class="real-add">Aggiungi</button>
         </form>
       </details>
-      <p class="stats-note">Come funziona: premi <b>⏱ Inizia a guardare</b> nella scheda di un anime (o il pulsante qui sopra), poi passa alla scheda di Brave dove guardi. L'app conta il tempo in cui sei fuori; quando torni ti chiede quanto hai guardato e aggiorna gli episodi.</p>`;
+      <p class="stats-note">Il timer: premi <b>Inizia a guardare</b> nella scheda di un anime, poi passa alla scheda dove guardi. L'app conta il tempo in cui sei fuori e, quando torni, ti chiede quanto hai visto.</p>`;
   }
 
   function renderStats() {
@@ -810,11 +911,10 @@
       for (const g of a.genres || []) genreEps.set(g, (genreEps.get(g) || 0) + a.ep);
     }
     const done = list.filter((a) => a.status === "done").length;
+    const watching = list.filter((a) => a.status === "watching").length;
 
     // Periodi: dal registro degli episodi segnati
-    const dayStart = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
     const today = new Date();
-    const t0 = dayStart(today);
     const days = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
@@ -834,47 +934,48 @@
     const maxDay = Math.max(1, ...days.map((d) => d.min));
 
     if (!totalEps) {
-      box.innerHTML = `<div class="empty"><div class="big">📊</div><p><strong>Ancora niente da mostrare.</strong></p><p>Segna gli episodi che guardi e qui vedrai quanto tempo ci passi.</p></div>${realSection()}`;
+      box.innerHTML = `<div class="empty">${icon("chart")}<h3 class="display">Ancora nessun dato</h3><p>Segna gli episodi che guardi: qui vedrai quanto tempo passi sugli anime.</p></div>${realSection()}`;
       return;
     }
 
     const hours = totalMin / 60;
     const dd = Math.floor(hours / 24);
+    const hh = Math.floor(hours % 24);
     const big =
       hours >= 24
-        ? `${dd}<small> ${dd === 1 ? "giorno" : "giorni"}</small> ${Math.floor(hours % 24)}<small> ${Math.floor(hours % 24) === 1 ? "ora" : "ore"}</small>`
-        : `${Math.floor(hours)}<small> ore</small> ${Math.round(totalMin % 60)}<small> min</small>`;
-    const cap = hours >= 24 ? `${Math.round(hours)} ore in totale, a guardare anime` : "il tempo passato davanti agli anime";
+        ? `${dd}<small>${dd === 1 ? "giorno" : "giorni"}</small>${hh ? `${hh}<small>${hh === 1 ? "ora" : "ore"}</small>` : ""}`
+        : `${Math.floor(hours)}<small>${Math.floor(hours) === 1 ? "ora" : "ore"}</small>${Math.round(totalMin % 60)}<small>min</small>`;
+    const cap = hours >= 24 ? `Passati a guardare anime: ${Math.round(hours)} ore in tutto (stima)` : "Passati a guardare anime (stima)";
 
     const topGenres = [...genreEps.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
     const maxG = topGenres[0]?.[1] || 1;
 
     box.innerHTML = `
-      <div class="big-stat"><div class="num">${big}</div><div class="cap">${esc(cap)}</div></div>
+      <div class="big-stat"><div class="num display">${big}</div><div class="cap">${esc(cap)}</div></div>
       <div class="stat-grid">
         <div class="stat-box"><b>${totalEps}</b><span>episodi visti</span></div>
-        <div class="stat-box"><b>${done}</b><span>anime finiti</span></div>
-        <div class="stat-box"><b>${list.filter((a) => a.status === "watching").length}</b><span>in corso</span></div>
+        <div class="stat-box"><b>${done}</b><span>serie finite</span></div>
+        <div class="stat-box"><b>${watching}</b><span>in corso</span></div>
       </div>
       <div class="stat-grid">
         <div class="stat-box"><b>${fmtTime(todayMin)}</b><span>oggi</span></div>
         <div class="stat-box"><b>${fmtTime(weekMin)}</b><span>ultimi 7 giorni</span></div>
         <div class="stat-box"><b>${fmtTime(monthMin)}</b><span>questo mese</span></div>
       </div>
-      <h3 class="stats-sec">Ultimi 7 giorni</h3>
+      <p class="eyebrow stats-sec">Ultimi 7 giorni</p>
       <div class="bars">${days
         .map(
-          (d) => `<div class="bar ${d.isToday ? "today" : ""}">
+          (d) => `<div class="day ${d.isToday ? "today" : ""}">
             <span class="v">${d.min ? String(Math.round(d.min / 6) / 10).replace(".", ",") + " h" : ""}</span>
-            <i class="${d.min ? "" : "zero"}" style="height:${d.min ? Math.max(6, (d.min / maxDay) * 80) : 4}px"></i>
+            <i style="height:${d.min ? Math.max(6, (d.min / maxDay) * 92) : 3}px"></i>
             <em>${esc(d.label)}</em></div>`
         )
         .join("")}</div>
       ${realSection()}
-      ${topGenres.length ? `<h3 class="stats-sec">Generi che guardi di più</h3>${topGenres
-        .map(([g, n]) => `<div class="genre-row"><span class="g-name">${esc(g)}</span><span class="g-bar"><i style="width:${(n / maxG) * 100}%"></i></span><span class="g-val">${n} ep.</span></div>`)
+      ${topGenres.length ? `<p class="eyebrow stats-sec">Generi più visti</p>${topGenres
+        .map(([g, n]) => `<div class="genre-row"><span class="g-name">${esc(genreLabel(g))}</span><span class="g-bar"><i style="width:${(n / maxG) * 100}%"></i></span><span class="g-val">${n} ep.</span></div>`)
         .join("")}` : ""}
-      <p class="stats-note">I numeri qui sopra sono una stima: l'app conta gli episodi che segni, ognuno per la sua durata (di solito circa 24 minuti). Oggi, settimana e mese si basano su quando li hai segnati.</p>`;
+      <p class="stats-note">Tempo stimato: ogni episodio segnato conta per la sua durata (di solito 23–24 minuti). Oggi, settimana e mese dipendono da quando hai segnato gli episodi.</p>`;
   }
 
   $("#stats").addEventListener("submit", (e) => {
@@ -991,7 +1092,7 @@
       if (day === localDate()) todayMin = m;
     }
     saveReal();
-    toast(days ? `🪐 AnimeSaturn aggiornato · oggi ${fmtTime(todayMin)}` : "Nessun tempo da importare (serve almeno 1 minuto)");
+    toast(days ? `AnimeSaturn aggiornato · oggi ${fmtTime(todayMin)}` : "Nessun tempo da importare (serve almeno 1 minuto)");
     renderStats();
     openSheet("#statsSheet");
   }
@@ -1023,16 +1124,16 @@
   }
 
   function timerButton(item) {
-    if (!session) return `<button class="timer-btn" id="timerDetail">⏱ Inizia a guardare</button>`;
-    if (session.id === item.id) return `<button class="timer-btn on" id="timerDetail">⏱ Timer attivo · Fine visione</button>`;
-    return `<button class="timer-btn" id="timerDetail">⏱ C'è un timer attivo${session.title ? ` per ${esc(session.title)}` : ""} · Chiudilo</button>`;
+    if (!session) return `<button class="timer-btn" id="timerDetail">${icon("timer")}Inizia a guardare</button>`;
+    if (session.id === item.id) return `<button class="timer-btn on" id="timerDetail">${icon("timer")}Timer attivo · Termina</button>`;
+    return `<button class="timer-btn" id="timerDetail">${icon("timer")}Timer attivo su ${esc(session.title || "un altro anime")} · Chiudilo</button>`;
   }
 
   function startSession(item) {
     session = { start: Date.now(), id: item?.id || null, title: item?.title || "", awayMs: 0, hiddenAt: null, lastAway: 0 };
     saveSession();
     renderTimer();
-    toast("Timer avviato: ora vai a guardare l'episodio");
+    toast("Timer avviato. Ora vai a guardare.");
   }
 
   function endSession() {
@@ -1070,20 +1171,28 @@
     if (!document.hidden) onShow();
   });
 
-  // Barra in basso visibile mentre il timer è attivo
+  // Barra in basso "in riproduzione", visibile mentre il timer è attivo
   function renderTimer() {
     const bar = $("#timerBar");
+    document.body.classList.toggle("timer-on", Boolean(session));
     if (!session) {
       bar.hidden = true;
+      renderHero();
       return;
     }
+    const item = session.id ? findItem(session.id) : null;
     const min = Math.round(session.awayMs / 60000);
     bar.hidden = false;
-    bar.innerHTML = `<span class="t-dot"></span>
-      <div class="t-text"><b>${esc(session.title || "Timer di visione")}</b><span>${
-        min ? `${esc(fmtTime(min))} contati finora` : "Vai a guardare: conto il tempo fuori dall'app"
+    bar.innerHTML = `${
+      item
+        ? `<img class="t-thumb" src="${esc(cover(item))}" data-t="${esc(item.title)}" alt="">`
+        : `<span class="t-icon">${icon("timer")}</span>`
+    }
+      <div class="t-text"><b>${esc(session.title || "Timer di visione")}</b><span><i class="t-dot"></i>${
+        min ? `${esc(fmtTime(min))} contati finora` : "In attesa: vai a guardare l'episodio"
       }</span></div>
-      <button id="timerEnd">Fine</button>`;
+      <button id="timerEnd" class="btn btn-primary">Termina</button>`;
+    renderHero();
   }
   $("#timerBar").addEventListener("click", (e) => {
     if (e.target.closest("#timerEnd")) openSessionSheet(false);
@@ -1100,26 +1209,26 @@
     sessionEps = item && !forgot ? Math.min(remaining, Math.round(total / durationOf(item))) : 0;
 
     let lead;
-    if (!total) lead = "Non sei ancora uscito dall'app, quindi non ho contato niente. Se hai guardato, scrivi i minuti qui sotto.";
+    if (!total) lead = "Non sei ancora uscito dall'app, quindi non c'è niente da contare. Se hai guardato, scrivi i minuti qui sotto.";
     else if (fromReturn && total !== last) lead = `Sei stato via <b>${esc(fmtTime(last))}</b>. In tutto, per questa visione: <b>${esc(fmtTime(total))}</b>.`;
     else lead = `${fromReturn ? "Sei stato via" : "Tempo contato"}: <b>${esc(fmtTime(total))}</b>.`;
 
     $("#sessionBody").innerHTML = `
-      <h2 class="s-title">${fromReturn ? "Bentornato! 👋" : "Fine visione"}</h2>
+      <h2 class="s-title display">${fromReturn ? "Bentornato" : "Fine visione"}</h2>
       <p class="s-lead">${lead}</p>
-      ${forgot ? `<p class="s-warn">⚠️ È tanto: forse hai lasciato il timer acceso. Correggi i minuti qui sotto.</p>` : ""}
-      <label class="s-field">Minuti guardati<input type="number" id="sessMin" min="0" max="1440" inputmode="numeric" value="${total || ""}" placeholder="0"></label>
+      ${forgot ? `<p class="s-warn">${icon("alert")}<span>Sei stato via parecchio: forse hai lasciato il timer acceso. Correggi i minuti qui sotto.</span></p>` : ""}
+      <label class="s-field"><span class="eyebrow">Minuti guardati</span><input type="number" id="sessMin" min="0" max="1440" inputmode="numeric" value="${total || ""}" placeholder="0"></label>
       ${
         item
           ? `<div class="episodes s-eps">
               <div>
-                <div class="label">Episodi di ${esc(item.title)} visti ora</div>
-                <div class="count" id="sessEps">${sessionEps}</div>
-                <div class="label" id="sessEpsTo"></div>
+                <div class="label">Episodi di ${esc(item.title)}</div>
+                <div class="count display" id="sessEps">${sessionEps}</div>
+                <div class="eps-to" id="sessEpsTo"></div>
               </div>
               <div class="stepper">
-                <button data-sess-ep="-1" aria-label="Un episodio in meno">−</button>
-                <button data-sess-ep="1" class="plus" aria-label="Un episodio in più">＋</button>
+                <button data-sess-ep="-1" aria-label="Un episodio in meno">${icon("minus")}</button>
+                <button data-sess-ep="1" class="plus" aria-label="Un episodio in più">${icon("plus")}</button>
               </div>
             </div>`
           : ""
@@ -1247,7 +1356,7 @@
       syncState = { status: "ok", error: "" };
     } catch (err) {
       syncState = { status: err.offline ? "offline" : "error", error: err.message || String(err) };
-      if (err.loggedOut) toast("Sessione scaduta: accedi di nuovo dal menu ⋯");
+      if (err.loggedOut) toast("Sessione scaduta: accedi di nuovo dal menu");
     } finally {
       syncing = false;
       renderAccount();
@@ -1272,7 +1381,7 @@
     if (!box) return;
     const note = $("#storageNote");
     if (!cloud) {
-      box.innerHTML = `<div class="acc-card"><b>👤 Account</b><p class="menu-note">La sincronizzazione tra dispositivi non è ancora configurata.</p></div>`;
+      box.innerHTML = `<div class="acc-card"><div class="acc-head"><span class="avatar off">${icon("user")}</span><div><b>Account</b><p class="acc-sub">La sincronizzazione tra dispositivi non è configurata.</p></div></div></div>`;
       return;
     }
     const user = cloud.user();
@@ -1284,8 +1393,7 @@
     if (!user) {
       box.innerHTML = `
         <form class="acc-card" id="accForm" autocomplete="on">
-          <b>👤 Account</b>
-          <p class="menu-note">Accedi per avere la stessa lista su iPhone e iPad.</p>
+          <div class="acc-head"><span class="avatar off">${icon("user")}</span><div><b>Account</b><p class="acc-sub">Accedi per avere la stessa lista su iPhone e iPad.</p></div></div>
           <input type="email" name="email" placeholder="Email" autocomplete="username" required>
           <input type="password" name="password" placeholder="Password (almeno 6 caratteri)" autocomplete="current-password" minlength="6" required>
           ${accountMsg ? `<p class="acc-msg">${esc(accountMsg)}</p>` : ""}
@@ -1296,20 +1404,20 @@
         </form>`;
       return;
     }
+    const state = syncState.status === "idle" && lastSync ? "ok" : syncState.status;
     const status = {
-      syncing: "🔄 Sincronizzazione in corso…",
-      ok: `✅ Sincronizzato ${lastSync ? ago(lastSync) : ""}`,
-      offline: "📴 Offline: sincronizzo appena torna la connessione",
-      error: `⚠️ ${syncState.error}`,
-      idle: lastSync ? `✅ Sincronizzato ${ago(lastSync)}` : "In attesa di sincronizzare…",
-    }[syncState.status];
+      syncing: "Sincronizzazione in corso…",
+      ok: `Sincronizzato ${lastSync ? ago(lastSync) : ""}`.trim(),
+      offline: "Offline: riprovo quando torna la connessione",
+      error: syncState.error,
+      idle: "In attesa di sincronizzare",
+    }[state];
     box.innerHTML = `
       <div class="acc-card">
-        <b>👤 ${esc(user.email)}</b>
-        <p class="menu-note acc-status">${esc(status)}</p>
+        <div class="acc-head"><span class="avatar">${esc(user.email.charAt(0))}</span><div><b>${esc(user.email)}</b><p class="acc-status" data-s="${state}">${esc(status)}</p></div></div>
         <div class="acc-actions">
-          <button type="button" class="s-secondary" id="accSync">Sincronizza ora</button>
-          <button type="button" class="s-secondary" id="accLogout">Esci</button>
+          <button type="button" class="s-secondary" id="accSync">${icon("sync")}Sincronizza</button>
+          <button type="button" class="s-secondary" id="accLogout">${icon("logout")}Esci</button>
         </div>
       </div>`;
   }
@@ -1328,14 +1436,14 @@
           accountMsg = "Ti abbiamo mandato un'email: apri il link per confermare l'account, poi torna qui e accedi.";
           return renderAccount();
         }
-        toast("Account creato! 🎉");
+        toast("Account creato");
       } else {
         await cloud.signIn(email, password);
         toast("Accesso effettuato");
       }
       accountMsg = "";
       await syncNow();
-      toast("Lista sincronizzata ✅");
+      toast("Lista sincronizzata");
     } catch (err) {
       accountMsg = err.message || String(err);
       renderAccount();
@@ -1370,7 +1478,7 @@
     history.replaceState(null, "", location.pathname + location.search);
     try {
       if (await cloud.fromUrlHash(hash)) {
-        toast("Email confermata: sei dentro! 🎉");
+        toast("Email confermata, accesso effettuato");
         await syncNow();
       }
     } catch (err) {
