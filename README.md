@@ -72,10 +72,33 @@ Il server è un progetto gratuito di [Supabase](https://supabase.com). Per confi
 
 1. crea il progetto su supabase.com;
 2. in **SQL Editor** esegui `supabase/setup.sql` (crea la tabella e le regole: ognuno vede solo i suoi dati);
-3. in **Authentication → URL Configuration** metti come *Site URL* l'indirizzo dell'app;
-4. copia *Project URL* e *publishable key* in `config.js`.
+3. sempre in **SQL Editor** esegui `supabase/community.sql` (serve alla community, vedi sotto);
+4. in **Authentication → URL Configuration** metti come *Site URL* l'indirizzo dell'app;
+5. copia *Project URL* e *publishable key* in `config.js`.
 
 La logica di unione e il collegamento a Supabase sono in `sync-core.js`.
+
+## Community: amici, voti e consigli
+
+Il pulsante con le due persone, in alto, apre la **Community** (serve l'account):
+
+- **nome utente**: la prima volta ne scegli uno (es. `@simo`); gli amici ti trovano solo con il nome
+  esatto, non esiste un elenco di tutti gli utenti. Con **Invita** mandi un link che apre l'app con il
+  tuo nome già scritto;
+- **amici**: scrivi il nome utente di un amico e gli arriva la richiesta; finché non la accetta non
+  vedete niente l'uno dell'altro. Puoi togliere un amico quando vuoi;
+- **voti**: nella scheda di ogni anime della tua lista dai da **½ a 5 stelle** (tocca la metà sinistra
+  di una stella per il mezzo voto, tocca di nuovo lo stesso voto per toglierlo) e, se vuoi, scrivi una
+  recensione. Le stelle compaiono anche sotto i poster;
+- **Attività**: cosa guardano, finiscono e votano i tuoi amici; toccando un amico vedi la sua lista e il
+  suo voto medio. Nella scheda di un anime, "I tuoi amici" mostra chi l'ha visto e con che voto;
+- **Consigliati**: "Consiglia a un amico" (nella scheda di un anime) manda l'anime con un messaggio;
+  chi lo riceve lo aggiunge a "Da vedere" con un tocco. Il pallino giallo sul pulsante segnala
+  richieste di amicizia e consigli nuovi.
+
+**Privacy**: gli amici vedono gli anime della tua lista (stato ed episodio), i voti e le recensioni;
+le **note personali restano solo tue**. Chi non è tuo amico non vede niente. Queste regole stanno nel
+database (Row Level Security in `supabase/community.sql`), non solo nell'app.
 
 ## Metterla sul telefono
 
@@ -105,7 +128,10 @@ e apri <http://localhost:8000>.
 |---|---|
 | `index.html` | struttura della pagina |
 | `style.css` | grafica |
-| `app.js` | logica: lista, ricerca, episodi, stagioni, backup |
+| `app.js` | logica: lista, ricerca, episodi, stagioni, voti, community, backup |
+| `sync-core.js` | unione dei dati tra dispositivi e collegamento a Supabase |
+| `config.js` | indirizzo e chiave pubblica del progetto Supabase |
+| `supabase/` | script SQL da eseguire una volta su Supabase (`setup.sql`, `community.sql`) |
 | `data/` | database degli anime (generato in automatico, non modificarlo a mano) |
 | `scripts/build-db.mjs` | script che crea il database da AniList |
 | `sw.js` | service worker per funzionare offline |

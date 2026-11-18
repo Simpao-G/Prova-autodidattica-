@@ -62,9 +62,12 @@
         for (const k of LOCAL_ONLY) if (it[k] === undefined && cur[k] !== undefined) keep[k] = cur[k];
         win = { ...it, ...keep };
       }
-      // le note hanno una loro data: vince la nota scritta per ultima, su qualunque dispositivo
+      // note e voti hanno una loro data: vince l'ultima modifica, su qualunque dispositivo
       const other = win === cur ? it : cur;
       if ((other.noteAt || 0) > (win.noteAt || 0)) win = { ...win, note: other.note, noteAt: other.noteAt };
+      if ((other.ratingAt || 0) > (win.ratingAt || 0)) {
+        win = { ...win, rating: other.rating, review: other.review, ratingAt: other.ratingAt };
+      }
       byId.set(it.id, win);
     }
     const list = [...byId.values()].filter((it) => !(deleted.anime[it.id] >= stamp(it)));
@@ -103,6 +106,11 @@
 
   // ---------- Client Supabase ----------
   const ITALIAN = [
+    // community (supabase/community.sql)
+    [/profiles_username_key/i, "Questo nome utente è già preso: scegline un altro."],
+    [/profiles_username_check/i, "Nome utente non valido: da 3 a 20 caratteri tra lettere minuscole, numeri, punto e trattino basso."],
+    [/friendships_pair_idx/i, "Tra voi c'è già una richiesta di amicizia."],
+    [/row-level security policy for table "recommendations"/i, "Puoi consigliare anime solo ai tuoi amici."],
     [/invalid login credentials/i, "Email o password sbagliate."],
     [/already registered|already exists/i, "Esiste già un account con questa email: usa Accedi."],
     [/at least 6 characters|password should be/i, "La password deve avere almeno 6 caratteri."],
@@ -176,7 +184,9 @@
       }
       if (!res.ok) {
         const raw = (json && (json.msg || json.error_description || json.message || json.error)) || `Errore ${res.status}`;
-        throw Object.assign(new Error(italian(String(raw))), { status: res.status, raw });
+        // code: codice di PostgreSQL/PostgREST (es. 23505 = valore già usato, PGRST205 = tabella mancante)
+        const code = json && typeof json.code === "string" ? json.code : "";
+        throw Object.assign(new Error(italian(String(raw))), { status: res.status, raw, code });
       }
       return json;
     }
@@ -289,6 +299,15 @@
           body: { data, rev: newRev, updated_at: new Date().toISOString() },
         });
         return Array.isArray(rows) && rows.length > 0;
+      },
+
+      // Chiamata generica alle tabelle (community): rest("library?select=*", { method, body, prefer })
+      rest(path, { method = "GET", body, prefer } = {}) {
+        return authed("/rest/v1/" + path, { method, body, headers: prefer ? { Prefer: prefer } : {} });
+      },
+      // Funzione del database (es. find_user)
+      rpc(name, args) {
+        return authed("/rest/v1/rpc/" + name, { method: "POST", body: args || {} });
       },
     };
     return api;

@@ -45,6 +45,9 @@
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 19.5h14"/></symbol>
     <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 19.5h14"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 2.8 19.5h18.4Z"/><path d="M12 10v4.5m0 2.8v.2"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.5"/><path d="M2.8 19.5c1-3.3 3.4-5 6.2-5s5.2 1.7 6.2 5M15.6 5.2a3.5 3.5 0 0 1 0 6.6M17.8 14.9c1.6.7 2.8 2.2 3.4 4.6"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M20.5 3.5 10.2 13.8M20.5 3.5 14 20.5l-3.8-6.7-6.7-3.8Z"/></symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m14.5 6-6 6 6 6"/></symbol>
   </svg>
 
   <header class="topbar">
@@ -58,6 +61,9 @@
       </button>
       <button class="icon-btn" id="statsBtn" aria-label="Statistiche">
         <svg class="ic" aria-hidden="true"><use href="#i-chart"></use></svg>
+      </button>
+      <button class="icon-btn comm-btn" id="commBtn" aria-label="Amici e consigli">
+        <svg class="ic" aria-hidden="true"><use href="#i-users"></use></svg><span class="badge" id="commBadge" hidden></span>
       </button>
       <button class="icon-btn" id="menuBtn" aria-label="Account e impostazioni">
         <svg class="ic" aria-hidden="true"><use href="#i-more"></use></svg>
@@ -92,10 +98,32 @@
     </div>
   </section>
 
+  <!-- Community: attività degli amici, consigli, amici (sotto la scheda anime, che ci si apre sopra) -->
+  <section class="sheet" id="communitySheet" aria-hidden="true">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-panel comm-panel">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h2 class="display">Community</h2>
+        <button class="sheet-close" data-close aria-label="Chiudi"><svg class="ic" aria-hidden="true"><use href="#i-close"></use></svg></button>
+      </div>
+      <div id="commBody"></div>
+    </div>
+  </section>
+
   <!-- Scheda anime -->
   <section class="sheet" id="detailSheet" aria-hidden="true">
     <div class="sheet-backdrop" data-close></div>
     <div class="sheet-panel detail-panel" id="detail"></div>
+  </section>
+
+  <!-- Consiglia a un amico -->
+  <section class="sheet" id="recSheet" aria-hidden="true">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-panel rec-panel">
+      <div class="sheet-handle"></div>
+      <div id="recBody"></div>
+    </div>
   </section>
 
   <!-- Statistiche -->
@@ -139,7 +167,7 @@
       </label>
       <p class="menu-note" id="storageNote">I dati restano salvati solo su questo dispositivo. Fai ogni tanto un backup.</p>
       <p class="menu-note" id="dbInfo"></p>
-      <p class="menu-note">Animeteca · versione 14</p>
+      <p class="menu-note">Animeteca · versione 15</p>
     </div>
   </section>
 

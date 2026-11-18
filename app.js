@@ -512,12 +512,14 @@
         } else if (a.status === "done") {
           corner = `<span class="badge-done" aria-label="Visto">${icon("check")}</span>`;
         }
+        // il tuo voto sotto il poster, al posto di tipo e anno (come su Letterboxd)
+        const subHtml = a.status !== "watching" && a.rating ? starsSmall(a.rating) : esc(sub);
         return `<button class="card" data-open="${esc(a.id)}">
           <div class="poster-wrap">
             <img class="cover" src="${esc(cover(a))}" data-t="${esc(a.title)}" alt="" loading="lazy">
             ${corner}${bar}
           </div>
-          <div class="info"><div class="title">${esc(a.title)}</div><div class="sub">${esc(sub)}${a.note ? icon("pencil", "note-ic") : ""}</div></div>
+          <div class="info"><div class="title">${esc(a.title)}</div><div class="sub">${subHtml}${a.note ? icon("pencil", "note-ic") : ""}</div></div>
         </button>`;
       })
       .join("");
@@ -525,8 +527,9 @@
 
   // ---------- Scheda anime ----------
   function renderDetail() {
-    // mentre scrivi una nota la scheda non si ridisegna (perderesti la tastiera): lo fa dopo
-    if (document.activeElement && document.activeElement.id === "noteInput") {
+    // mentre scrivi (nota o recensione) la scheda non si ridisegna (perderesti la tastiera): lo fa dopo
+    const typing = document.activeElement && ["noteInput", "reviewInput"].includes(document.activeElement.id);
+    if (typing) {
       pendingDetailRender = true;
       return;
     }
@@ -624,7 +627,10 @@
         </div>
         ${episodes}
         ${saved ? timerButton(item) : ""}
+        ${saved ? ratingSection(item) : ""}
         ${saved ? notesSection(item) : ""}
+        ${recommendButton()}
+        ${friendsSection(item)}
         <p class="synopsis ${long ? "clamp" : ""}" id="synopsis">${esc(synopsis)}</p>
         ${long ? `<button class="more" id="moreBtn">Leggi tutto</button>` : ""}
         ${synMeta}
@@ -634,6 +640,7 @@
         ${saved ? `<button class="remove-btn" id="removeBtn">${icon("trash")}Rimuovi dalla lista</button>` : ""}
       </div>`;
     autosize($("#noteInput"));
+    autosize($("#reviewInput"), 64);
   }
 
   // ---------- Note personali ----------
@@ -647,10 +654,10 @@
   }
 
   // la casella cresce con il testo
-  function autosize(ta) {
+  function autosize(ta, min = 88) {
     if (!ta) return;
     ta.style.height = "auto";
-    ta.style.height = Math.max(ta.scrollHeight + 2, 88) + "px";
+    ta.style.height = Math.max(ta.scrollHeight + 2, min) + "px";
   }
 
   let noteTimer = null;
@@ -668,10 +675,73 @@
     const state = $("#noteState");
     if (state) state.textContent = item.note ? "Salvata" : "";
   }
-  // salva subito la nota in sospeso (per esempio se esci dall'app mentre scrivi)
+  // salva subito nota e recensione in sospeso (per esempio se esci dall'app mentre scrivi)
   function flushNote() {
     const ta = $("#noteInput");
     if (noteTimer && ta && openItem) saveNote(openItem.id, ta.value);
+    const rv = $("#reviewInput");
+    if (reviewTimer && rv && openItem) saveReview(openItem.id, rv.value);
+  }
+
+  // ---------- Il tuo voto (da ½ a 5 stelle) e la recensione per gli amici ----------
+  const fmtRating = (r) => String(r).replace(".", ",");
+
+  // Stelline da mostrare (solo quelle piene e l'eventuale mezza, come su Letterboxd)
+  function starsSmall(r) {
+    r = Number(r) || 0;
+    if (!r) return "";
+    let html = "";
+    for (let i = 1; i <= Math.ceil(r); i++) html += `<span class="st${r >= i ? "" : " half"}">${icon("star", "fill")}</span>`;
+    return `<span class="stars" role="img" aria-label="${fmtRating(r)} stelle su 5">${html}</span>`;
+  }
+
+  // Le 5 stelle da toccare: la metà sinistra di una stella vale mezzo punto
+  function ratingSection(item) {
+    const r = Number(item.rating) || 0;
+    let stars = "";
+    for (let i = 1; i <= 5; i++) {
+      const fill = r >= i ? 100 : r >= i - 0.5 ? 50 : 0;
+      stars += `<span class="st">${icon("star", "fill")}<span class="st-fill" style="width:${fill}%">${icon("star", "fill")}</span>
+        <button type="button" class="st-hit l" data-rate="${i - 0.5}" aria-label="${fmtRating(i - 0.5)} su 5"></button>
+        <button type="button" class="st-hit r" data-rate="${i}" aria-label="${i} su 5"></button></span>`;
+    }
+    const social = profileReady();
+    return `<section class="rate-box">
+        <div class="notes-head"><p class="eyebrow">Il tuo voto</p><span class="note-state">${r ? `${fmtRating(r)} su 5` : "Tocca una stella"}</span></div>
+        <div class="stars big" role="group" aria-label="Il tuo voto, da mezza stella a 5">${stars}</div>
+        ${
+          social
+            ? `<textarea id="reviewInput" class="note-input review-input" rows="2" maxlength="1000" placeholder="Una recensione per i tuoi amici (facoltativa)">${esc(item.review || "")}</textarea>
+        <p class="rate-hint">Voto e recensione li vedono i tuoi amici. Le note qui sotto restano solo tue.</p>`
+            : ""
+        }
+      </section>`;
+  }
+
+  // Tocchi la stella del voto che hai già dato: il voto si toglie
+  function setRating(value) {
+    const item = openItem && findItem(openItem.id);
+    if (!item) return;
+    const v = Number(value);
+    item.rating = Number(item.rating) === v ? null : v;
+    item.ratingAt = Date.now(); // si sincronizza come le note: vince l'ultimo voto dato
+    save();
+    renderDetail();
+    renderGrid();
+  }
+
+  let reviewTimer = null;
+  function saveReview(id, text) {
+    clearTimeout(reviewTimer);
+    reviewTimer = null;
+    const item = findItem(id);
+    if (!item) return;
+    const value = String(text).replace(/\s+$/, "").slice(0, 1000);
+    if ((item.review || "") !== value) {
+      item.review = value;
+      item.ratingAt = Date.now();
+      save();
+    }
   }
 
   function showDetail(anime) {
@@ -873,23 +943,43 @@
   });
 
   $("#detail").addEventListener("input", (e) => {
-    if (e.target.id !== "noteInput" || !openItem) return;
-    autosize(e.target);
+    if (!openItem) return;
     const id = openItem.id;
+    if (e.target.id === "reviewInput") {
+      autosize(e.target, 64);
+      clearTimeout(reviewTimer);
+      reviewTimer = setTimeout(() => saveReview(id, e.target.value), 700);
+      return;
+    }
+    if (e.target.id !== "noteInput") return;
+    autosize(e.target);
     const state = $("#noteState");
     if (state) state.textContent = "…";
     clearTimeout(noteTimer);
     noteTimer = setTimeout(() => saveNote(id, e.target.value), 700);
   });
   $("#detail").addEventListener("focusout", (e) => {
-    if (e.target.id !== "noteInput" || !openItem) return;
-    saveNote(openItem.id, e.target.value);
+    if (!openItem) return;
+    if (e.target.id === "noteInput") saveNote(openItem.id, e.target.value);
+    else if (e.target.id === "reviewInput") saveReview(openItem.id, e.target.value);
+    else return;
     renderGrid(); // aggiorna la matita sul poster e la nota in "Continua a guardare"
     // ridisegno rimandato: aspetta che un eventuale tocco su un pulsante arrivi a destinazione
     if (pendingDetailRender) setTimeout(() => pendingDetailRender && renderDetail(), 350);
   });
 
   $("#detail").addEventListener("click", (e) => {
+    const rate = e.target.closest("[data-rate]");
+    if (rate) return setRating(rate.dataset.rate);
+    if (e.target.closest("#recommendBtn")) return openRecommend(openItem);
+    const friend = e.target.closest("[data-friend]");
+    if (friend) {
+      // la pagina dell'amico, nel pannello Community (sotto la scheda)
+      closeSheet("#detailSheet");
+      openSheet("#communitySheet");
+      openFriend(friend.dataset.friend);
+      return refreshCommunity();
+    }
     if (e.target.closest("#synToggle")) {
       showOriginal = showOriginal === openItem.id ? null : openItem.id;
       return renderDetail();
@@ -1442,6 +1532,7 @@
       lastSync = Date.now();
       localStorage.setItem(LAST_SYNC_KEY, String(lastSync));
       syncState = { status: "ok", error: "" };
+      communityAfterSync(); // la lista che vedono gli amici si aggiorna dopo ogni sincronizzazione
     } catch (err) {
       syncState = { status: err.offline ? "offline" : "error", error: err.message || String(err) };
       if (err.loggedOut) toast("Sessione scaduta: accedi di nuovo dal menu");
@@ -1544,6 +1635,7 @@
       if (!confirm("Uscire dall'account? La lista resta su questo dispositivo, ma non si sincronizza più.")) return;
       await cloud.signOut();
       syncState = { status: "idle", error: "" };
+      resetCommunity();
       renderAccount();
       toast("Sei uscito dall'account");
     }
@@ -1573,6 +1665,908 @@
       toast(err.message || "Link non valido");
     }
   }
+
+  // ---------- Community: amici, voti e consigli ----------
+  // Sul server (supabase/community.sql) ci sono: il profilo con il nome utente, le amicizie,
+  // la "lista condivisa" che vedono gli amici (stato, episodio, voto e recensione: mai le note)
+  // e i consigli. Le regole del database fanno vedere tutto questo solo agli amici accettati.
+  const PROFILE_KEY = "animeteca.profile.v1";
+  const PUB_KEY = "animeteca.pub.v1"; // cosa è già stato pubblicato per gli amici (per mandare solo le novità)
+  const USERNAME_RE = /^[a-z0-9_.]{3,20}$/;
+  const USERNAME_HELP = "Da 3 a 20 caratteri: lettere minuscole, numeri, punto e trattino basso.";
+
+  function readStore(key) {
+    try {
+      return JSON.parse(localStorage.getItem(key));
+    } catch {
+      return null;
+    }
+  }
+  function writeStore(key, value) {
+    try {
+      if (value == null) localStorage.removeItem(key);
+      else localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      /* non grave: si rifà la prossima volta */
+    }
+  }
+
+  const me = () => (cloud && cloud.user() ? cloud.user().id : null);
+  let profile = readStore(PROFILE_KEY); // { uid, username, display_name } del tuo account
+  const profileReady = () => Boolean(profile && profile.uid && profile.uid === me());
+
+  const comm = { gen: 0, at: 0, tried: 0, loading: null, error: "", missing: false, profileChecked: null, friendships: [], people: new Map(), feed: [], recs: [] };
+  // msg / profileMsg: messaggi dei moduli, tenuti qui così non spariscono se il pannello si ridisegna
+  const view = { tab: "feed", friend: null, friendRows: null, friendTab: null, msg: "", profileMsg: "", prefill: "", fresh: new Set() };
+  const friendViews = new Map(); // cosa pensano gli amici di un anime: id -> { at, rows }
+  let pendingCommRender = false;
+
+  const communityOpen = () => $("#communitySheet").classList.contains("open");
+  const isMissing = (err) => ["PGRST205", "42P01"].includes(err && err.code) || /could not find the table|does not exist/i.test(err && err.raw);
+  const accepted = () => comm.friendships.filter((f) => f.status === "accepted");
+  const otherOf = (f) => (f.requester === me() ? f.addressee : f.requester);
+  const friendIds = () => accepted().map(otherOf);
+  const personName = (p) => (p && (p.display_name || p.username)) || "Qualcuno";
+  function hueOf(id) {
+    let h = 7;
+    for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) % 360;
+    return h;
+  }
+  const avatarOf = (p, id, cls = "") =>
+    `<span class="avatar p${cls ? " " + cls : ""}" style="--h:${hueOf(id)}" aria-hidden="true">${esc([...personName(p)][0])}</span>`;
+  const when = (iso) => ago(Date.parse(iso) || Date.now());
+  const validImage = (src) => (typeof src === "string" && /^https:\/\//.test(src) && src.length <= 500 ? src : null);
+  // Copertine che arrivano dagli amici: solo dai siti degli anime (niente immagini "spia" da altri siti)
+  const animeImg = (src) => typeof src === "string" && /^https:\/\/([a-z0-9-]+\.)*(anilist\.co|myanimelist\.net)\//i.test(src);
+  const friendCover = (r) => (animeImg(r.image) ? r.image : placeholder(r.title));
+
+  function statusText(r) {
+    if (r.status === "done") return "Visto";
+    if (r.status === "plan") return "Da vedere";
+    return r.episodes ? `In corso · ep. ${r.ep} di ${r.episodes}` : `In corso · ep. ${r.ep}`;
+  }
+
+  // ----- Dati dal server
+  async function fetchProfile() {
+    const uid = me();
+    const rows = await cloud.rest(`profiles?select=id,username,display_name&id=eq.${uid}`);
+    profile = rows && rows[0] ? { uid, username: rows[0].username, display_name: rows[0].display_name || "" } : null;
+    writeStore(PROFILE_KEY, profile);
+    comm.profileChecked = uid; // ora si sa se il profilo c'è (se no, si mostra "Scegli il tuo nome utente")
+    return profile;
+  }
+
+  // Amicizie, nomi, attività degli amici e consigli ricevuti (al massimo ogni 30 secondi)
+  async function refreshCommunity({ force = false } = {}) {
+    if (!cloud || !me()) return renderBadge(); // per esempio sessione scaduta: niente pallino
+
+    if (comm.loading) return comm.loading;
+    if (!force && Date.now() - comm.tried < 30 * 1000) return;
+    comm.tried = Date.now();
+    const gen = comm.gen;
+    comm.loading = (async () => {
+      try {
+        if (!profileReady()) await fetchProfile();
+        if (gen !== comm.gen) return;
+        if (!profile) {
+          comm.error = "";
+          comm.missing = false;
+          return;
+        }
+        const uid = profile.uid;
+        const fs = await cloud.rest("friendships?select=id,requester,addressee,status,created_at&order=created_at.desc");
+        const others = [...new Set(fs.map((f) => (f.requester === uid ? f.addressee : f.requester)))];
+        const [people, feed, recs] = await Promise.all([
+          others.length ? cloud.rest(`profiles?select=id,username,display_name&id=in.(${others.join(",")})`) : [],
+          cloud.rest(
+            `library?select=user_id,anime_id,al_id,title,image,status,ep,episodes,rating,review,updated_at&user_id=neq.${uid}&order=updated_at.desc&limit=60`
+          ),
+          cloud.rest(
+            `recommendations?select=id,from_user,anime_id,al_id,title,image,message,created_at,seen_at&to_user=eq.${uid}&order=created_at.desc&limit=50`
+          ),
+        ]);
+        if (gen !== comm.gen) return;
+        Object.assign(comm, { friendships: fs, people: new Map(people.map((p) => [p.id, p])), feed, recs });
+        comm.at = Date.now();
+        comm.error = "";
+        comm.missing = false;
+      } catch (err) {
+        if (gen !== comm.gen) return;
+        comm.missing = isMissing(err);
+        comm.error = err.message || String(err);
+        if (err.offline && comm.at) comm.error = ""; // offline: restano i dati di prima
+      } finally {
+        if (gen === comm.gen) {
+          comm.loading = null;
+          renderBadge();
+          if (communityOpen()) renderCommunity();
+          if ($("#detailSheet").classList.contains("open")) renderDetail(); // nomi degli amici nella scheda
+        }
+      }
+    })();
+    return comm.loading;
+  }
+
+  function communityAfterSync() {
+    refreshCommunity().then(() => publishLibrary());
+  }
+
+  function resetCommunity() {
+    comm.gen++;
+    profile = null;
+    writeStore(PROFILE_KEY, null);
+    Object.assign(comm, { at: 0, tried: 0, loading: null, error: "", missing: false, profileChecked: null, friendships: [], people: new Map(), feed: [], recs: [] });
+    Object.assign(view, { tab: "feed", friend: null, friendRows: null, friendTab: null, msg: "", profileMsg: "" });
+    view.fresh.clear();
+    friendViews.clear();
+    pubChecked = false;
+    renderBadge();
+    if (communityOpen()) renderCommunity();
+  }
+
+  // ----- La tua lista come la vedono gli amici (tabella library)
+  function libraryRow(a, uid) {
+    const t = Math.max(a.updatedAt || 0, a.ratingAt || 0, a.addedAt || 0) || Date.now();
+    const int = (n) => (Number.isFinite(Number(n)) && Number(n) >= 0 ? Math.floor(Number(n)) : null);
+    const r = Number(a.rating);
+    return {
+      user_id: uid,
+      anime_id: String(a.id).slice(0, 40),
+      al_id: int(a.alId),
+      title: String(a.title || "?").slice(0, 300),
+      image: validImage(a.image),
+      status: a.status,
+      ep: int(a.ep) || 0,
+      episodes: int(a.episodes) || null,
+      rating: r >= 0.5 && r <= 5 && r * 2 === Math.floor(r * 2) ? r : null,
+      review: a.review ? String(a.review).slice(0, 1000) : null,
+      updated_at: new Date(t).toISOString(),
+    };
+  }
+  function hashStr(s) {
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+    return (h >>> 0).toString(36);
+  }
+
+  let publishing = false;
+  let publishAgain = false;
+  let pubChecked = false; // una volta per avvio confronta con ciò che c'è davvero sul server
+  async function publishLibrary() {
+    if (!cloud || !profileReady()) return;
+    if (publishing) {
+      publishAgain = true;
+      return;
+    }
+    publishing = true;
+    const uid = profile.uid;
+    try {
+      let snap = readStore(PUB_KEY);
+      if (!snap || snap.uid !== uid || !snap.rows) snap = { uid, rows: {} };
+      const rows = list.filter((a) => a && a.id && STATUS[a.status]).map((a) => libraryRow(a, uid));
+      const now = {};
+      for (const r of rows) now[r.anime_id] = hashStr(JSON.stringify(r));
+      if (!pubChecked) {
+        const onServer = await cloud.rest(`library?select=anime_id&user_id=eq.${uid}`);
+        const there = new Set(onServer.map((r) => r.anime_id));
+        for (const id of Object.keys(snap.rows)) if (!there.has(id)) delete snap.rows[id];
+        for (const id of there) if (!(id in snap.rows)) snap.rows[id] = "?";
+        pubChecked = true;
+      }
+      const changed = rows.filter((r) => snap.rows[r.anime_id] !== now[r.anime_id]);
+      const gone = Object.keys(snap.rows).filter((id) => !(id in now));
+      for (let i = 0; i < changed.length; i += 200) {
+        const part = changed.slice(i, i + 200);
+        await cloud.rest("library?on_conflict=user_id,anime_id", {
+          method: "POST",
+          body: part,
+          prefer: "resolution=merge-duplicates,return=minimal",
+        });
+        for (const r of part) snap.rows[r.anime_id] = now[r.anime_id];
+        writeStore(PUB_KEY, snap);
+      }
+      for (let i = 0; i < gone.length; i += 100) {
+        const part = gone.slice(i, i + 100);
+        const ids = encodeURIComponent(part.map((id) => `"${id.replace(/["\\]/g, "")}"`).join(","));
+        await cloud.rest(`library?user_id=eq.${uid}&anime_id=in.(${ids})`, { method: "DELETE", prefer: "return=minimal" });
+        for (const id of part) delete snap.rows[id];
+        writeStore(PUB_KEY, snap);
+      }
+    } catch (err) {
+      if (isMissing(err)) comm.missing = true; // riprova alla prossima sincronizzazione
+    } finally {
+      publishing = false;
+      if (publishAgain) {
+        publishAgain = false;
+        publishLibrary();
+      }
+    }
+  }
+
+  // ----- Pallino sul pulsante: richieste di amicizia e consigli nuovi
+  function renderBadge() {
+    const b = $("#commBadge");
+    if (!b) return;
+    let n = 0;
+    if (profileReady()) {
+      n += comm.friendships.filter((f) => f.status === "pending" && f.addressee === profile.uid).length;
+      n += comm.recs.filter((r) => !r.seen_at).length;
+    }
+    b.textContent = n > 9 ? "9+" : String(n);
+    b.hidden = !n;
+    $("#commBtn").setAttribute("aria-label", n ? `Amici: ${n} novità` : "Amici e consigli");
+  }
+
+  // ----- Cosa ne pensano gli amici (nella scheda dell'anime)
+  async function loadFriendViews(id) {
+    const prev = friendViews.get(id);
+    friendViews.set(id, { at: Date.now(), rows: prev ? prev.rows : [] });
+    try {
+      const rows = await cloud.rest(
+        `library?select=user_id,status,ep,episodes,rating,review,updated_at&anime_id=eq.${encodeURIComponent(id)}&user_id=neq.${me()}&order=updated_at.desc`
+      );
+      friendViews.set(id, { at: Date.now(), rows: rows || [] });
+      if (openItem && openItem.id === id && $("#detailSheet").classList.contains("open")) renderDetail();
+    } catch {
+      /* senza opinioni degli amici la scheda funziona lo stesso */
+    }
+  }
+
+  function friendsSection(item) {
+    if (!profileReady() || comm.missing) return "";
+    const fv = friendViews.get(item.id);
+    if (!fv || Date.now() - fv.at > 60 * 1000) loadFriendViews(item.id);
+    const rows = fv ? fv.rows : [];
+    // chi te l'ha consigliato
+    const tips = comm.recs
+      .filter((r) => r.anime_id === item.id)
+      .map((r) => {
+        const p = comm.people.get(r.from_user);
+        return `<div class="fs-tip">${icon("send")}<p>Te l'ha consigliato <b>${esc(personName(p))}</b>${r.message ? `: “${esc(r.message)}”` : ""}</p></div>`;
+      })
+      .join("");
+    if (!rows.length && !tips) return "";
+    return `<section class="friends-say"><p class="eyebrow">I tuoi amici</p>${tips}${rows
+      .map((r) => {
+        const p = comm.people.get(r.user_id);
+        return `<button class="fs-row" data-friend="${esc(r.user_id)}">${avatarOf(p, r.user_id)}
+          <div class="fs-main">
+            <div class="fs-top"><b>${esc(personName(p))}</b>${starsSmall(r.rating)}</div>
+            <div class="fs-sub">${esc(statusText(r))} · ${esc(when(r.updated_at))}</div>
+            ${r.review ? `<p class="fs-review">${esc(r.review)}</p>` : ""}
+          </div></button>`;
+      })
+      .join("")}</section>`;
+  }
+
+  function recommendButton() {
+    return profileReady() && !comm.missing ? `<button class="line-btn" id="recommendBtn">${icon("send")}Consiglia a un amico</button>` : "";
+  }
+
+  // ----- Pannello "Amici"
+  async function openCommunity(tab) {
+    if (!tab && profileReady()) {
+      // con il pallino acceso si va dritti alla novità: consigli nuovi o richieste di amicizia
+      if (comm.recs.some((r) => !r.seen_at)) tab = "recs";
+      else if (comm.friendships.some((f) => f.status === "pending" && f.addressee === profile.uid)) tab = "friends";
+    }
+    if (tab) {
+      view.tab = tab;
+      view.friend = null;
+    }
+    view.fresh.clear();
+    openSheet("#communitySheet");
+    renderCommunity();
+    refreshCommunity({ force: Date.now() - comm.at > 10 * 1000 });
+  }
+  $("#commBtn").addEventListener("click", () => openCommunity());
+
+  function renderCommunity() {
+    const box = $("#commBody");
+    // mentre scrivi in un campo non ridisegna (perderesti la tastiera): lo fa quando hai finito
+    if (document.activeElement && box.contains(document.activeElement) && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) {
+      pendingCommRender = true;
+      return;
+    }
+    pendingCommRender = false;
+    const keep = {};
+    box.querySelectorAll("input[id]").forEach((el) => (keep[el.id] = el.value));
+    const showingRecs = communityOpen() && profileReady() && !view.friend && view.tab === "recs";
+    if (showingRecs) for (const r of comm.recs) if (!r.seen_at) view.fresh.add(r.id);
+    box.innerHTML = communityHtml();
+    for (const [id, v] of Object.entries(keep)) {
+      const el = document.getElementById(id);
+      if (el && v) el.value = v;
+    }
+    const fi = $("#friendInput");
+    if (fi && view.prefill) {
+      fi.value = view.prefill;
+      view.prefill = "";
+    }
+    if (showingRecs) markRecsSeen();
+  }
+
+  const spinner = `<div class="spinner"></div>`;
+  const emptyComm = (ic, title, text, action = "") =>
+    `<div class="empty comm-empty">${icon(ic)}<h3 class="display">${title}</h3><p>${text}</p>${action}</div>`;
+
+  function communityHtml() {
+    if (!cloud) return emptyComm("users", "Community non disponibile", "Su questa versione dell'app l'account non è configurato.");
+    if (!me()) {
+      return `<div class="comm-intro">
+          <h3 class="display">Gli anime, con gli amici</h3>
+          <p>Vota quello che guardi da mezza a 5 stelle, scopri cosa guardano i tuoi amici e consigliagli le serie da non perdere.</p>
+          <p>Serve un account: lo stesso che tiene insieme la lista su iPhone e iPad.</p>
+          <button class="btn btn-primary" data-comm="login">${icon("user")}Accedi o crea un account</button>
+        </div>`;
+    }
+    if (comm.missing) {
+      return `<div class="comm-intro">
+          <h3 class="display">Quasi pronto</h3>
+          <p>La community non è ancora attiva sul server. Va fatto una volta sola: in Supabase apri <b>SQL Editor</b>, incolla il contenuto di <b>supabase/community.sql</b> e premi <b>Run</b>.</p>
+          <button class="btn btn-ghost" data-comm="retry">${icon("sync")}Riprova</button>
+        </div>`;
+    }
+    if (!profileReady()) {
+      if (comm.error && !comm.loading) {
+        return `<div class="comm-intro"><p class="acc-msg">${esc(comm.error)}</p><button class="btn btn-ghost" data-comm="retry">${icon("sync")}Riprova</button></div>`;
+      }
+      if (comm.profileChecked !== me()) return spinner;
+      return profileFormHtml();
+    }
+    if (view.friend) return friendPageHtml();
+    const reqs = comm.friendships.filter((f) => f.status === "pending" && f.addressee === profile.uid).length;
+    const unseen = comm.recs.filter((r) => !r.seen_at && !view.fresh.has(r.id)).length;
+    const tabs = [
+      ["feed", "Attività", 0],
+      ["recs", "Consigliati", unseen],
+      ["friends", "Amici", reqs],
+    ];
+    return `<div class="seg" role="tablist">${tabs
+      .map(
+        ([k, label, n]) =>
+          `<button role="tab" class="seg-btn${view.tab === k ? " active" : ""}" data-ctab="${k}" aria-selected="${view.tab === k}">${label}${
+            n ? `<b class="seg-n">${n}</b>` : ""
+          }</button>`
+      )
+      .join("")}</div>
+      ${comm.error ? `<p class="acc-msg">${esc(comm.error)}</p>` : ""}
+      ${view.tab === "recs" ? recsHtml() : view.tab === "friends" ? friendsHtml() : feedHtml()}`;
+  }
+
+  function profileFormHtml() {
+    return `<form class="comm-intro" id="profileForm" autocomplete="off" novalidate>
+        <h3 class="display">Scegli il tuo nome utente</h3>
+        <p>I tuoi amici ti trovano con questo nome: dev'essere solo tuo.</p>
+        <label class="at-field"><span>@</span><input id="pfUser" name="username" placeholder="nome_utente" maxlength="21" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="next"></label>
+        <input id="pfName" class="plain-input" name="display" placeholder="Il tuo nome (facoltativo)" maxlength="40" enterkeyhint="done">
+        <p class="hint">${USERNAME_HELP}</p>
+        <p class="form-msg" id="profileMsg">${esc(view.profileMsg)}</p>
+        <button type="submit" class="btn btn-primary">Continua</button>
+        <div class="privacy">
+          <p class="eyebrow">Cosa vedono i tuoi amici</p>
+          <ul><li>gli anime della tua lista, con stato ed episodio;</li><li>i tuoi voti e le tue recensioni.</li></ul>
+          <p>Le note personali restano solo tue. Chi non è tuo amico non vede niente.</p>
+        </div>
+      </form>`;
+  }
+
+  function feedHtml() {
+    if (!comm.at) return spinner;
+    if (!friendIds().length) {
+      return emptyComm(
+        "users",
+        "Ancora nessun amico",
+        "Aggiungi i tuoi amici con il loro nome utente: qui vedrai cosa guardano, i voti e le recensioni.",
+        `<button class="btn btn-ghost" data-ctab="friends">${icon("plus")}Aggiungi un amico</button>`
+      );
+    }
+    if (!comm.feed.length) return emptyComm("play", "Ancora niente", "Quando i tuoi amici aggiungono anime alla lista o li votano, lo vedi qui.");
+    return comm.feed
+      .map((r, i) => {
+        const p = comm.people.get(r.user_id);
+        const verb = r.status === "done" ? "ha visto" : r.status === "plan" ? "vuole vedere" : "sta guardando";
+        const ep = r.status === "watching" ? (r.episodes ? `ep. ${r.ep} di ${r.episodes}` : `ep. ${r.ep}`) : "";
+        return `<div class="feed-item" role="button" tabindex="0" data-row="feed:${i}">
+            <img class="fi-poster" src="${esc(friendCover(r))}" data-t="${esc(r.title)}" alt="" loading="lazy">
+            <div class="fi-main">
+              <p class="fi-line"><button class="fi-who" data-friend="${esc(r.user_id)}">${esc(personName(p))}</button> ${verb} <b>${esc(r.title)}</b></p>
+              <p class="fi-meta">${starsSmall(r.rating)}<span>${esc([ep, when(r.updated_at)].filter(Boolean).join(" · "))}</span></p>
+              ${r.review ? `<p class="fi-review">${esc(r.review)}</p>` : ""}
+            </div>
+          </div>`;
+      })
+      .join("");
+  }
+
+  function recsHtml() {
+    if (!comm.at) return spinner;
+    if (!comm.recs.length) {
+      return emptyComm(
+        "send",
+        "Nessun consiglio",
+        "Quando un amico ti consiglia un anime, lo trovi qui. Per consigliarne uno tu, apri la sua scheda e tocca “Consiglia a un amico”."
+      );
+    }
+    return comm.recs
+      .map((r, i) => {
+        const p = comm.people.get(r.from_user);
+        const mine = findItem(r.anime_id);
+        const fresh = view.fresh.has(r.id);
+        return `<div class="feed-item rec-item${fresh ? " fresh" : ""}" role="button" tabindex="0" data-row="rec:${i}">
+            <img class="fi-poster" src="${esc(friendCover(r))}" data-t="${esc(r.title)}" alt="" loading="lazy">
+            <div class="fi-main">
+              <p class="fi-line"><b>${esc(r.title)}</b></p>
+              <p class="fi-meta"><span>da ${esc(personName(p))} · ${esc(when(r.created_at))}</span>${fresh ? `<span class="new-tag">Nuovo</span>` : ""}</p>
+              ${r.message ? `<p class="fi-review">${esc(r.message)}</p>` : ""}
+              <div class="rec-actions">
+                ${
+                  mine
+                    ? `<span class="r-tag">${esc(STATUS[mine.status])}</span>`
+                    : `<button class="mini-btn primary" data-addrec="${i}">${icon("plus")}Da vedere</button>`
+                }
+                <button class="mini-btn" data-delrec="${esc(r.id)}">Togli</button>
+              </div>
+            </div>
+          </div>`;
+      })
+      .join("");
+  }
+
+  function personRow(id, sub, right, link) {
+    const p = comm.people.get(id);
+    const inner = `${avatarOf(p, id)}<span class="pe-main"><b>${esc(personName(p))}</b><span>${esc(sub)}</span></span>${right}`;
+    return link ? `<button class="person" data-friend="${esc(id)}">${inner}</button>` : `<div class="person">${inner}</div>`;
+  }
+
+  function friendsHtml() {
+    const uid = profile.uid;
+    const incoming = comm.friendships.filter((f) => f.status === "pending" && f.addressee === uid);
+    const outgoing = comm.friendships.filter((f) => f.status === "pending" && f.requester === uid);
+    const friends = accepted();
+    const at = (id) => "@" + (comm.people.get(id)?.username || "");
+    return `<div class="me-card">
+        <div><p class="eyebrow">Il tuo nome utente</p><b class="me-name">@${esc(profile.username)}</b></div>
+        <button class="btn btn-ghost" data-comm="invite">${icon("send")}Invita</button>
+      </div>
+      <form class="add-friend" id="friendForm" autocomplete="off" novalidate>
+        <label class="at-field"><span>@</span><input id="friendInput" name="username" placeholder="nome utente dell'amico" maxlength="21" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="send"></label>
+        <button type="submit" class="btn btn-primary">Aggiungi</button>
+      </form>
+      <p class="form-msg" id="friendMsg">${esc(view.msg)}</p>
+      ${
+        incoming.length
+          ? `<p class="eyebrow comm-sec">Richieste ricevute</p>${incoming
+              .map((f) =>
+                personRow(
+                  f.requester,
+                  "vuole essere tuo amico",
+                  `<span class="pe-actions"><button class="mini-btn primary" data-accept="${esc(f.id)}">Accetta</button><button class="mini-btn" data-decline="${esc(f.id)}">Rifiuta</button></span>`
+                )
+              )
+              .join("")}`
+          : ""
+      }
+      <p class="eyebrow comm-sec">I tuoi amici${friends.length ? ` · ${friends.length}` : ""}</p>
+      ${
+        friends.length
+          ? friends.map((f) => personRow(otherOf(f), at(otherOf(f)), icon("chevron-right", "chev"), true)).join("")
+          : `<p class="hint">Ancora nessuno. Scrivi qui sopra il nome utente di un amico, oppure mandagli un invito con il tuo.</p>`
+      }
+      ${
+        outgoing.length
+          ? `<p class="eyebrow comm-sec">Richieste inviate</p>${outgoing
+              .map((f) => personRow(f.addressee, `${at(f.addressee)} · in attesa`, `<button class="mini-btn" data-cancel="${esc(f.id)}">Annulla</button>`))
+              .join("")}`
+          : ""
+      }`;
+  }
+
+  function friendPageHtml() {
+    const id = view.friend;
+    const p = comm.people.get(id);
+    const f = accepted().find((x) => otherOf(x) === id);
+    const rows = view.friendRows;
+    let body;
+    if (!rows) body = spinner;
+    else if (!rows.length) body = `<p class="hint">${esc(personName(p))} non ha ancora anime nella lista.</p>`;
+    else {
+      const by = { watching: [], done: [], plan: [] };
+      rows.forEach((r, i) => (by[r.status] || by.plan).push([r, i]));
+      const rated = rows.filter((r) => r.rating);
+      const avg = rated.length ? rated.reduce((n, r) => n + Number(r.rating), 0) / rated.length : 0;
+      const tab = view.friendTab || (by.watching.length ? "watching" : by.done.length ? "done" : "plan");
+      const cards = by[tab]
+        .map(([r, i]) => {
+          const sub = r.rating ? starsSmall(r.rating) : r.status === "watching" ? esc(r.episodes ? `Ep. ${r.ep} / ${r.episodes}` : `Ep. ${r.ep}`) : "";
+          return `<button class="card" data-row="friend:${i}">
+              <div class="poster-wrap"><img class="cover" src="${esc(friendCover(r))}" data-t="${esc(r.title)}" alt="" loading="lazy"></div>
+              <div class="info"><div class="title">${esc(r.title)}</div><div class="sub">${sub}</div></div>
+            </button>`;
+        })
+        .join("");
+      body = `<div class="stat-grid fp-stats">
+          <div class="stat-box"><b>${by.done.length}</b><span>visti</span></div>
+          <div class="stat-box"><b>${by.watching.length}</b><span>in corso</span></div>
+          <div class="stat-box"><b>${avg ? fmtRating(avg.toFixed(1)) : "–"}</b><span>voto medio</span></div>
+        </div>
+        <div class="seg">${[
+          ["watching", "In corso"],
+          ["done", "Visti"],
+          ["plan", "Da vedere"],
+        ]
+          .map(([k, label]) => `<button class="seg-btn${tab === k ? " active" : ""}" data-ftab="${k}">${label}<b class="seg-c">${by[k].length}</b></button>`)
+          .join("")}</div>
+        ${cards ? `<div class="mini-grid">${cards}</div>` : `<p class="hint">Niente qui.</p>`}`;
+    }
+    return `<button class="back-btn" data-comm="back">${icon("chevron-left")}Amici</button>
+      <div class="fp-head">${avatarOf(p, id, "lg")}<div><h3 class="display">${esc(personName(p))}</h3><p>@${esc(p?.username || "")}</p></div></div>
+      ${body}
+      ${f ? `<button class="remove-btn" data-unfriend="${esc(f.id)}">${icon("close")}Togli dagli amici</button>` : ""}`;
+  }
+
+  async function openFriend(id) {
+    Object.assign(view, { friend: id, friendRows: null, friendTab: null });
+    renderCommunity();
+    $("#communitySheet .sheet-panel").scrollTop = 0;
+    try {
+      const rows = await cloud.rest(
+        `library?select=anime_id,al_id,title,image,status,ep,episodes,rating,review,updated_at&user_id=eq.${encodeURIComponent(id)}&order=updated_at.desc`
+      );
+      if (view.friend === id) view.friendRows = rows || [];
+    } catch (err) {
+      if (view.friend === id) view.friendRows = [];
+      toast(err.message || String(err));
+    }
+    if (view.friend === id) renderCommunity();
+  }
+
+  // Apre la scheda di un anime visto nella community (dalla tua lista, dal database o com'è)
+  async function openAnime(r) {
+    if (!r) return;
+    let anime = findItem(r.anime_id);
+    if (!anime) {
+      await loadDB().catch(() => {});
+      anime = (db && db.byId.get(r.anime_id)) || {
+        id: r.anime_id,
+        alId: r.al_id || undefined,
+        title: r.title,
+        image: animeImg(r.image) ? r.image : "",
+        episodes: r.episodes || null,
+        genres: [],
+      };
+    }
+    showDetail(anime);
+  }
+
+  // ----- Azioni
+  async function createProfile(form) {
+    const username = form.username.value.trim().toLowerCase().replace(/^@/, "");
+    const display = form.display.value.trim().slice(0, 40);
+    const msg = (t) => {
+      view.profileMsg = t;
+      const el = $("#profileMsg");
+      if (el) el.textContent = t;
+    };
+    if (!USERNAME_RE.test(username)) return msg("Nome utente non valido. " + USERNAME_HELP);
+    const btn = form.querySelector("button[type=submit]");
+    btn.disabled = true;
+    try {
+      await cloud.rest("profiles", { method: "POST", body: { username, display_name: display || null }, prefer: "return=minimal" });
+      profile = { uid: me(), username, display_name: display };
+      writeStore(PROFILE_KEY, profile);
+      view.profileMsg = "";
+      toast(`Benvenuto nella community, @${username}`);
+    } catch (err) {
+      btn.disabled = false;
+      if (/profiles_pkey/.test(err.raw || "")) await fetchProfile().catch(() => {}); // creato da un altro dispositivo
+      if (!profileReady()) return msg(err.message || String(err));
+    }
+    view.tab = "friends";
+    renderCommunity();
+    if ($("#detailSheet").classList.contains("open")) renderDetail();
+    publishLibrary();
+    refreshCommunity({ force: true });
+  }
+
+  async function addFriend(raw) {
+    const msg = (t) => {
+      view.msg = t;
+      const el = $("#friendMsg");
+      if (el) el.textContent = t;
+    };
+    const username = String(raw || "").trim().toLowerCase().replace(/^@/, "");
+    if (!username) return msg("Scrivi il nome utente del tuo amico.");
+    if (!USERNAME_RE.test(username)) return msg("Questo nome utente non esiste: " + USERNAME_HELP.toLowerCase());
+    if (username === profile.username) return msg("Questo è il tuo nome utente.");
+    msg("Cerco…");
+    try {
+      const found = await cloud.rpc("find_user", { p_username: username });
+      const other = found && found[0];
+      if (!other) return msg(`Nessun utente si chiama @${username}: controlla di averlo scritto giusto.`);
+      comm.people.set(other.id, other);
+      const existing = comm.friendships.find((f) => otherOf(f) === other.id);
+      if (existing && existing.status === "accepted") return msg(`Tu e ${personName(other)} siete già amici.`);
+      if (existing && existing.requester === other.id) {
+        // ti aveva già chiesto l'amicizia: la accetti
+        await cloud.rest(`friendships?id=eq.${existing.id}`, {
+          method: "PATCH",
+          body: { status: "accepted", responded_at: new Date().toISOString() },
+          prefer: "return=minimal",
+        });
+        toast(`Ora tu e ${personName(other)} siete amici`);
+      } else if (existing) {
+        return msg(`Hai già chiesto l'amicizia a ${personName(other)}: aspetta che la accetti.`);
+      } else {
+        await cloud.rest("friendships", { method: "POST", body: { addressee: other.id }, prefer: "return=minimal" });
+        toast(`Richiesta mandata a @${other.username}`);
+      }
+      msg("");
+      const input = $("#friendInput");
+      if (input) {
+        input.value = "";
+        input.blur();
+      }
+      await refreshCommunity({ force: true });
+    } catch (err) {
+      msg(err.message || String(err));
+    }
+  }
+
+  async function changeFriendship(id, accept, okMsg) {
+    try {
+      if (accept) {
+        await cloud.rest(`friendships?id=eq.${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          body: { status: "accepted", responded_at: new Date().toISOString() },
+          prefer: "return=minimal",
+        });
+      } else {
+        await cloud.rest(`friendships?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", prefer: "return=minimal" });
+      }
+      toast(okMsg);
+    } catch (err) {
+      toast(err.message || String(err));
+    }
+    friendViews.clear();
+    await refreshCommunity({ force: true });
+  }
+
+  async function unfriend(id) {
+    const f = comm.friendships.find((x) => String(x.id) === String(id));
+    const name = personName(f && comm.people.get(otherOf(f)));
+    if (!confirm(`Togliere ${name} dagli amici? Non vedrete più la lista l'uno dell'altro.`)) return;
+    Object.assign(view, { friend: null, friendRows: null, tab: "friends" });
+    await changeFriendship(id, false, `${name} non è più tra i tuoi amici`);
+  }
+
+  async function markRecsSeen() {
+    const unseen = comm.recs.filter((r) => !r.seen_at);
+    if (!unseen.length) return;
+    const now = new Date().toISOString();
+    for (const r of unseen) r.seen_at = now;
+    renderBadge();
+    try {
+      await cloud.rest(`recommendations?to_user=eq.${profile.uid}&seen_at=is.null`, {
+        method: "PATCH",
+        body: { seen_at: now },
+        prefer: "return=minimal",
+      });
+    } catch {
+      for (const r of unseen) r.seen_at = null; // riprova la prossima volta
+      renderBadge();
+    }
+  }
+
+  async function deleteRec(id) {
+    try {
+      await cloud.rest(`recommendations?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", prefer: "return=minimal" });
+      comm.recs = comm.recs.filter((r) => String(r.id) !== String(id));
+      renderCommunity();
+    } catch (err) {
+      toast(err.message || String(err));
+    }
+  }
+
+  async function addFromRec(r) {
+    if (!r || findItem(r.anime_id)) return;
+    await loadDB().catch(() => {});
+    const anime = (db && db.byId.get(r.anime_id)) || {
+      id: r.anime_id,
+      alId: r.al_id || undefined,
+      title: r.title,
+      image: animeImg(r.image) ? r.image : "",
+      episodes: null,
+      genres: [],
+    };
+    setStatus(anime, "plan");
+    renderCommunity();
+  }
+
+  async function shareInvite() {
+    const url = `${appUrl()}?amico=${encodeURIComponent(profile.username)}`;
+    const text = `Aggiungimi su Animeteca: il mio nome utente è @${profile.username}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Animeteca", text, url });
+        return;
+      } catch (err) {
+        if (err && err.name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      toast("Invito copiato: incollalo in un messaggio");
+    } catch {
+      prompt("Copia l'invito e mandalo al tuo amico:", `${text} ${url}`);
+    }
+  }
+
+  // Link d'invito: ...?amico=nome -> apre "Amici" con il nome già scritto
+  function readInvite() {
+    const params = new URLSearchParams(location.search);
+    const name = (params.get("amico") || "").trim().toLowerCase().replace(/^@/, "");
+    if (!params.has("amico")) return;
+    params.delete("amico");
+    const qs = params.toString();
+    history.replaceState(null, "", location.pathname + (qs ? "?" + qs : "") + location.hash);
+    if (!USERNAME_RE.test(name) || !cloud) return;
+    Object.assign(view, { tab: "friends", friend: null, prefill: name, msg: `Per aggiungere @${name} agli amici tocca “Aggiungi”.` });
+    setTimeout(() => openCommunity(), 300);
+  }
+
+  $("#communitySheet").addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (e.target.id === "profileForm") createProfile(e.target);
+    else if (e.target.id === "friendForm") addFriend(e.target.username.value);
+  });
+
+  $("#communitySheet").addEventListener("click", (e) => {
+    const t = e.target;
+    const tab = t.closest("[data-ctab]");
+    if (tab) {
+      Object.assign(view, { tab: tab.dataset.ctab, friend: null, msg: "" });
+      if (view.tab !== "recs") view.fresh.clear();
+      renderCommunity();
+      $("#communitySheet .sheet-panel").scrollTop = 0;
+      return;
+    }
+    const action = t.closest("[data-comm]");
+    if (action) {
+      const a = action.dataset.comm;
+      if (a === "login") {
+        closeSheet("#communitySheet");
+        $("#menuBtn").click();
+      } else if (a === "back") {
+        Object.assign(view, { friend: null, friendRows: null, tab: "friends" });
+        renderCommunity();
+      } else if (a === "invite") shareInvite();
+      else if (a === "retry") {
+        comm.missing = false;
+        comm.error = "";
+        renderCommunity();
+        refreshCommunity({ force: true });
+      }
+      return;
+    }
+    const ftab = t.closest("[data-ftab]");
+    if (ftab) {
+      view.friendTab = ftab.dataset.ftab;
+      return renderCommunity();
+    }
+    const friend = t.closest("[data-friend]");
+    if (friend) return openFriend(friend.dataset.friend);
+    const acc = t.closest("[data-accept]");
+    if (acc) return changeFriendship(acc.dataset.accept, true, "Ora siete amici");
+    const dec = t.closest("[data-decline]");
+    if (dec) return changeFriendship(dec.dataset.decline, false, "Richiesta rifiutata");
+    const cancel = t.closest("[data-cancel]");
+    if (cancel) return changeFriendship(cancel.dataset.cancel, false, "Richiesta annullata");
+    const unf = t.closest("[data-unfriend]");
+    if (unf) return unfriend(unf.dataset.unfriend);
+    const add = t.closest("[data-addrec]");
+    if (add) return addFromRec(comm.recs[Number(add.dataset.addrec)]);
+    const del = t.closest("[data-delrec]");
+    if (del) return deleteRec(del.dataset.delrec);
+    const row = t.closest("[data-row]");
+    if (row) {
+      const [kind, i] = row.dataset.row.split(":");
+      const src = kind === "feed" ? comm.feed : kind === "rec" ? comm.recs : view.friendRows || [];
+      return openAnime(src[Number(i)]);
+    }
+  });
+  $("#communitySheet").addEventListener("keydown", (e) => {
+    if ((e.key === "Enter" || e.key === " ") && e.target.matches("[data-row]")) {
+      e.preventDefault();
+      e.target.click();
+    }
+  });
+  $("#communitySheet").addEventListener("focusout", () => {
+    if (pendingCommRender) setTimeout(() => pendingCommRender && renderCommunity(), 350);
+  });
+
+  // ----- Consiglia a un amico
+  let recDraft = null; // { item, to: Set di amici scelti }
+  async function openRecommend(item) {
+    if (!item) return;
+    recDraft = { item, to: new Set() };
+    renderRecommend();
+    openSheet("#recSheet");
+    if (!comm.at) {
+      await refreshCommunity({ force: true });
+      if (recDraft && recDraft.item === item) renderRecommend();
+    }
+  }
+
+  function renderRecommend() {
+    const item = recDraft.item;
+    const friends = friendIds();
+    const sub = [item.type, item.year].filter(Boolean).join(" · ");
+    let body;
+    if (!comm.at && comm.loading) body = spinner;
+    else if (!friends.length) {
+      body = `<p class="hint">Per consigliare un anime aggiungi prima qualche amico.</p>
+        <button class="s-secondary" data-rec="friends">${icon("users")}Aggiungi un amico</button>`;
+    } else {
+      body = `<p class="eyebrow comm-sec">A chi lo consigli?</p>
+        <div class="pick-list">${friends
+          .map((id) => {
+            const p = comm.people.get(id);
+            return `<label class="pick"><input type="checkbox" value="${esc(id)}"${recDraft.to.has(id) ? " checked" : ""}>${avatarOf(p, id)}
+              <span class="pe-main"><b>${esc(personName(p))}</b><span>@${esc(p?.username || "")}</span></span><i class="tick">${icon("check")}</i></label>`;
+          })
+          .join("")}</div>
+        <textarea id="recMsg" class="note-input rec-msg" rows="2" maxlength="280" placeholder="Perché dovrebbe guardarlo? (facoltativo)"></textarea>
+        <button class="real-add" id="recSend"${recDraft.to.size ? "" : " disabled"}>${icon("send")}Invia il consiglio</button>`;
+    }
+    $("#recBody").innerHTML = `<div class="sheet-head"><h2 class="display">Consiglia</h2>
+        <button class="sheet-close" data-close aria-label="Chiudi">${icon("close")}</button></div>
+      <div class="rec-anime"><img src="${esc(cover(item))}" data-t="${esc(item.title)}" alt=""><div><b>${esc(item.title)}</b><span>${esc(sub)}</span></div></div>
+      ${body}`;
+  }
+
+  $("#recSheet").addEventListener("change", (e) => {
+    if (e.target.type !== "checkbox" || !recDraft) return;
+    if (e.target.checked) recDraft.to.add(e.target.value);
+    else recDraft.to.delete(e.target.value);
+    $("#recSend").disabled = !recDraft.to.size;
+  });
+  $("#recSheet").addEventListener("input", (e) => {
+    if (e.target.id === "recMsg") autosize(e.target, 64);
+  });
+  $("#recSheet").addEventListener("click", async (e) => {
+    if (e.target.closest('[data-rec="friends"]')) {
+      closeSheet("#recSheet");
+      closeSheet("#detailSheet");
+      return openCommunity("friends");
+    }
+    if (!e.target.closest("#recSend") || !recDraft || !recDraft.to.size) return;
+    const { item } = recDraft;
+    const to = [...recDraft.to];
+    const message = $("#recMsg").value.trim().slice(0, 280);
+    const btn = $("#recSend");
+    btn.disabled = true;
+    try {
+      await cloud.rest("recommendations", {
+        method: "POST",
+        body: to.map((uid) => ({
+          to_user: uid,
+          anime_id: String(item.id).slice(0, 40),
+          al_id: Number.isInteger(item.alId) ? item.alId : null,
+          title: String(item.title || "?").slice(0, 300),
+          image: validImage(item.image),
+          message: message || null,
+        })),
+        prefer: "return=minimal",
+      });
+      closeSheet("#recSheet");
+      recDraft = null;
+      toast(to.length === 1 ? `Consiglio mandato a ${personName(comm.people.get(to[0]))}` : `Consiglio mandato a ${to.length} amici`);
+    } catch (err) {
+      btn.disabled = false;
+      toast(err.message || String(err));
+    }
+  });
 
   // ---------- Backup ----------
   $("#menuBtn").addEventListener("click", () => {
@@ -1640,7 +2634,9 @@
   renderTimer();
   if (!document.hidden) onShow();
   importSaturn();
+  readInvite();
   renderAccount();
+  renderBadge();
   handleAuthRedirect().then(() => syncNow());
 
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
