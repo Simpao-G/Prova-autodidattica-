@@ -4,6 +4,6 @@
  * Finché sono vuoti, l'app funziona come prima, solo su questo dispositivo.
  */
 window.ANIMETECA_CONFIG = {
-  supabaseUrl: "", // es. "https://abcdefgh.supabase.co"
-  supabaseKey: "", // la "publishable key" (sb_publishable_...) oppure la vecchia "anon key"
+  supabaseUrl: "https://neltgdazdgaocapgijbq.supabase.co",
+  supabaseKey: "sb_publishable_JtKBPBTBgiz2VUnYqyuI9g_FUjTZ72I", // chiave pubblica (non segreta)
 };
