@@ -1,0 +1,45 @@
+# TEMPORANEO: verifica le fonti delle classifiche (Jikan / MyAnimeList, r/anime Awards). Da cancellare.
+name: Prova fonti classifiche (temporaneo)
+
+on:
+  push:
+    paths:
+      - .github/workflows/probe-sources.yml
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Jikan
+        run: |
+          J=https://api.jikan.moe/v4
+          echo "== top/anime"
+          curl -s "$J/top/anime?limit=2" | jq -c '{keys: (.data[0]|keys), sample: (.data[0]|{mal_id,title,type,score,scored_by,rank,popularity,year,aired:.aired.from}), pagination}'
+          sleep 1.5
+          echo "== anime per anno"
+          curl -s "$J/anime?start_date=2025-01-01&end_date=2025-12-31&order_by=score&sort=desc&sfw=true&limit=3" | jq -c '{n:(.data|length), sample:[.data[]|{mal_id,title,score,scored_by,type,aired:.aired.from}], pagination}'
+          sleep 1.5
+          echo "== anime per genere"
+          curl -s "$J/anime?genres=1&order_by=score&sort=desc&sfw=true&limit=3" | jq -c '{sample:[.data[]|{mal_id,title,score,scored_by,genres:[.genres[].name]}], pagination}'
+          sleep 1.5
+          echo "== elenco generi"
+          curl -s "$J/genres/anime" | jq -c '[.data[]|{mal_id,name}]'
+          sleep 1.5
+          echo "== anime/52991"
+          curl -s "$J/anime/52991" | jq -c '.data|{mal_id,title,score,scored_by}'
+          sleep 1.5
+          echo "== episodi 52991"
+          curl -s "$J/anime/52991/episodes" | jq -c '{keys:(.data[0]|keys), first:.data[0], last:.data[-1], pagination}'
+      - name: r/anime Awards
+        run: |
+          curl -sL https://r-anime.github.io/animeawards/ -o awards.html
+          echo "dimensione: $(wc -c < awards.html)"
+          head -c 3000 awards.html; echo
+          echo "== link"
+          grep -oE '(src|href)="[^"]+"' awards.html | sort -u | head -60
+          for f in $(grep -oE 'src="[^"]+\.js"' awards.html | sed 's/src="//; s/"$//' | head -6); do
+            case "$f" in http*) url="$f";; /*) url="https://r-anime.github.io$f";; *) url="https://r-anime.github.io/animeawards/$f";; esac
+            echo "== js $url"
+            curl -sL "$url" | grep -oE "[\"'][^\"' ]*\.json[\"']" | sort -u | head -40
+          done
