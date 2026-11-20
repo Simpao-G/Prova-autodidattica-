@@ -192,6 +192,10 @@ a { color: inherit; }
 @media (min-width: 700px) {
   .search-btn { width: 260px; }
 }
+/* telefoni: la scritta "animeteca" lascia il posto ai pulsanti (resta il logo) */
+@media (max-width: 479px) {
+  .brand-name { display: none; }
+}
 /* telefoni stretti: la ricerca diventa solo icona, così c'è posto per tutti i pulsanti */
 @media (max-width: 419px) {
   .search-btn { justify-content: center; width: 40px; height: 40px; margin-right: 2px; padding: 0; }
@@ -1118,6 +1122,52 @@ a { color: inherit; }
 .pick input:focus-visible ~ .tick { outline: 2px solid var(--accent); outline-offset: 2px; }
 .rec-msg { margin: 16px 0 12px; min-height: 64px; }
 .real-add:disabled { opacity: 0.45; }
+
+/* ---------- Classifiche ---------- */
+.rank-panel { min-height: 60vh; }
+.rank-chips {
+  display: flex;
+  gap: 8px;
+  margin: 0 calc(-1 * var(--gutter)) 10px;
+  padding: 0 var(--gutter) 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.rank-chips::-webkit-scrollbar { display: none; }
+.rank-chip {
+  flex: none;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 17px;
+  background: none;
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.rank-chip.active { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+.rank-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  text-align: left;
+}
+.rank-n { flex: none; width: 30px; color: var(--text-3); font-size: 22px; text-align: right; font-variant-numeric: tabular-nums; }
+.rank-row:nth-child(-n + 3) .rank-n { color: var(--accent); }
+.rank-row img { flex: none; width: 46px; height: 69px; border-radius: 4px; object-fit: cover; background: var(--surface); }
+.rank-row .r-main { display: flex; flex-direction: column; }
+.rank-row .r-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.rank-src { margin-top: 3px; color: var(--text-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+.rank-side { display: flex; flex: none; flex-direction: column; align-items: flex-end; gap: 4px; }
+.rank-score { font-size: 19px; font-stretch: 80%; font-weight: 800; font-variant-numeric: tabular-nums; }
+.rank-note { margin: 0 0 8px; padding: 10px 12px; border-radius: var(--radius); background: var(--accent-soft); color: var(--accent); font-size: 13px; }
+.rank-panel .stats-note a { color: var(--text-2); }
 
 /* ---------- Avvisi ---------- */
 .toast {

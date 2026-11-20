@@ -2209,6 +2209,138 @@
     }
   });
 
+  // ---------- Classifiche ----------
+  // data/rankings.json lo prepara ogni lunedì scripts/build-rankings.mjs: per ogni anime il voto è la
+  // media tra AniList e la media dei siti (MyAnimeList, Kitsu, AniDB...) del database manami-project.
+  // items[id] = [alId, malId, titolo, tipo, anno, episodi, copertina, voto, AniList, mediaSiti]
+  const RANK_TABS = [
+    ["top", "Migliori"],
+    ["genres", "Generi"],
+    ["year", "Anno"],
+  ];
+  const rank = { tab: "top", genre: null, year: null };
+  let rankings = null;
+  let rankingsPromise = null;
+
+  function loadRankings() {
+    if (!rankingsPromise) {
+      rankingsPromise = fetch("data/rankings.json")
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)
+        .then((json) => {
+          rankings = json && json.version === 1 ? json : null;
+          if (!rankings) rankingsPromise = null; // riprova alla prossima apertura
+          return rankings;
+        });
+    }
+    return rankingsPromise;
+  }
+
+  const oneDecimal = (v) => (Math.round(v * 10) / 10).toFixed(1).replace(".", ",");
+  const dayIt = (iso) => (iso ? new Date(iso).toLocaleDateString("it-IT") : "?");
+
+  function rankRow(id, n) {
+    const it = rankings.items[id];
+    if (!it) return "";
+    const [, , title, type, year, episodes, cover, score, al, sites] = it;
+    const img = cover ? (cover.startsWith("http") ? cover : rankings.coverPrefix + cover) : placeholder(title);
+    const sub = [type, year, episodes && `${episodes} ep.`].filter(Boolean).join(" · ");
+    const src = [al != null && `AniList ${oneDecimal(al)}`, sites != null && `Media siti ${oneDecimal(sites)}`].filter(Boolean).join(" · ");
+    const mine = findItem(id);
+    return `<button class="rank-row" data-rid="${esc(id)}">
+        <span class="rank-n display">${n}</span>
+        <img src="${esc(img)}" data-t="${esc(title)}" alt="" loading="lazy">
+        <span class="r-main"><span class="r-title">${esc(title)}</span><span class="r-sub">${esc(sub)}</span><span class="rank-src">${esc(src)}</span></span>
+        <span class="rank-side"><b class="rank-score">${oneDecimal(score)}</b>${mine ? `<span class="r-tag">${esc(STATUS[mine.status])}</span>` : ""}</span>
+      </button>`;
+  }
+
+  function renderRankings() {
+    const box = $("#rankBody");
+    const r = rankings;
+    if (!r) {
+      box.innerHTML = emptyComm(
+        "trophy",
+        "Classifiche in arrivo",
+        "Le classifiche arrivano con il prossimo aggiornamento del database, che si fa da solo ogni lunedì."
+      );
+      return;
+    }
+    let chips = "";
+    let ids = r.top;
+    if (rank.tab === "genres") {
+      const genres = Object.keys(r.genres).sort((a, b) => genreLabel(a).localeCompare(genreLabel(b), "it"));
+      if (!genres.includes(rank.genre)) rank.genre = genres.includes("Action") ? "Action" : genres[0];
+      chips = genres
+        .map((g) => `<button class="rank-chip${g === rank.genre ? " active" : ""}" data-genre="${esc(g)}">${esc(genreLabel(g))}</button>`)
+        .join("");
+      ids = r.genres[rank.genre] || [];
+    } else if (rank.tab === "year") {
+      const years = Object.keys(r.years).sort((a, b) => b - a);
+      // si parte dall'anno più recente; se ha ancora pochi titoli (es. a gennaio), dal precedente
+      if (!years.includes(rank.year)) rank.year = (r.years[years[0]] || []).length >= 10 || years.length < 2 ? years[0] : years[1];
+      chips = years.map((y) => `<button class="rank-chip${y === rank.year ? " active" : ""}" data-year="${y}">${y}</button>`).join("");
+      ids = r.years[rank.year] || [];
+    }
+    box.innerHTML = `<div class="seg" role="tablist">${RANK_TABS.map(
+      ([k, label]) => `<button role="tab" class="seg-btn${rank.tab === k ? " active" : ""}" data-rtab="${k}" aria-selected="${rank.tab === k}">${label}</button>`
+    ).join("")}</div>
+      ${chips ? `<div class="rank-chips">${chips}</div>` : ""}
+      ${r.sources.sites ? "" : `<p class="rank-note">Questa settimana solo AniList: la media degli altri siti non era disponibile.</p>`}
+      <div class="rank-list">${ids.length ? ids.map((id, i) => rankRow(id, i + 1)).join("") : `<p class="hint">Nessun titolo qui.</p>`}</div>
+      <p class="stats-note">Voto: media tra AniList e la media dei siti (MyAnimeList, Kitsu, AniDB, Anime-Planet e altri) del database pubblico
+        <a href="https://github.com/manami-project/anime-offline-database" target="_blank" rel="noopener">anime-offline-database</a>.
+        Entrano solo anime con abbastanza voti. Aggiornate il ${dayIt(r.updated)}${r.sitesUpdated ? ` · media dei siti del ${dayIt(r.sitesUpdated)}` : ""}.</p>`;
+  }
+
+  // Tocco su un anime: la sua scheda (dalla tua lista o dal database dell'app, altrimenti con i dati della classifica)
+  async function openRanked(id) {
+    const it = rankings && rankings.items[id];
+    if (!it) return;
+    const [alId, malId, title, type, year, episodes, cover] = it;
+    let anime = findItem(id);
+    if (!anime) {
+      await loadDB().catch(() => {});
+      // per id AniList prima: più voci possono avere lo stesso id MyAnimeList
+      anime = (db && (db.byAl.get(alId) || db.byId.get(id))) || null;
+      if (anime && findItem(anime.id)) anime = findItem(anime.id);
+    }
+    showDetail(
+      anime || { id, alId, malId: malId || null, title, type, year: year || null, episodes: episodes || null, image: cover ? rankings.coverPrefix + cover : "", genres: [] }
+    );
+  }
+
+  $("#rankBtn").addEventListener("click", async () => {
+    openSheet("#rankSheet");
+    if (!rankings) {
+      $("#rankBody").innerHTML = spinner;
+      await loadRankings();
+    }
+    renderRankings();
+  });
+
+  $("#rankSheet").addEventListener("click", (e) => {
+    const tab = e.target.closest("[data-rtab]");
+    if (tab) {
+      rank.tab = tab.dataset.rtab;
+      renderRankings();
+      $("#rankSheet .sheet-panel").scrollTop = 0;
+      return;
+    }
+    const genre = e.target.closest("[data-genre]");
+    if (genre) {
+      rank.genre = genre.dataset.genre;
+      return renderRankings();
+    }
+    const year = e.target.closest("[data-year]");
+    if (year) {
+      rank.year = year.dataset.year;
+      return renderRankings();
+    }
+    const row = e.target.closest("[data-rid]");
+    if (row) openRanked(row.dataset.rid);
+  });
+
   // ---------- Backup ----------
   $("#menuBtn").addEventListener("click", () => {
     renderAccount();
