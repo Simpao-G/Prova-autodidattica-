@@ -1,4 +1,4 @@
-# TEMPORANEO: verifica le fonti delle classifiche (Jikan / MyAnimeList, r/anime Awards). Da cancellare.
+# TEMPORANEO: verifica le fonti delle classifiche. Da cancellare.
 name: Prova fonti classifiche (temporaneo)
 
 on:
@@ -10,44 +10,36 @@ on:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 8
     steps:
-      - name: Jikan
+      - name: Database offline (manami-project)
         run: |
-          J=https://api.jikan.moe/v4
-          echo "== top/anime"
-          curl -s --max-time 25 -w "\n[http %{http_code} %{time_total}s]\n" -o out.json "$J/top/anime?limit=2" || echo "[curl fallito]"
-          jq -c '{keys: (.data[0]|keys), sample: (.data[0]|{mal_id,title,type,score,scored_by,rank,popularity,year,aired:.aired.from}), pagination}' out.json 2>/dev/null || head -c 400 out.json
-          sleep 1.5
-          echo "== anime per anno"
-          curl -s --max-time 25 -w "\n[http %{http_code} %{time_total}s]\n" -o out.json "$J/anime?start_date=2025-01-01&end_date=2025-12-31&order_by=score&sort=desc&sfw=true&limit=3" || echo "[curl fallito]"
-          jq -c '{n:(.data|length), sample:[.data[]|{mal_id,title,score,scored_by,type,aired:.aired.from}], pagination}' out.json 2>/dev/null || head -c 400 out.json
-          sleep 1.5
-          echo "== anime per genere"
-          curl -s --max-time 25 -w "\n[http %{http_code} %{time_total}s]\n" -o out.json "$J/anime?genres=1&order_by=score&sort=desc&sfw=true&limit=3" || echo "[curl fallito]"
-          jq -c '{sample:[.data[]|{mal_id,title,score,scored_by,genres:[.genres[].name]}], pagination}' out.json 2>/dev/null || head -c 400 out.json
-          sleep 1.5
-          echo "== elenco generi"
-          curl -s --max-time 25 -w "\n[http %{http_code} %{time_total}s]\n" -o out.json "$J/genres/anime" || echo "[curl fallito]"
-          jq -c '[.data[]|{mal_id,name}]' out.json 2>/dev/null || head -c 400 out.json
-          sleep 1.5
-          echo "== anime/52991"
-          curl -s --max-time 25 -w "\n[http %{http_code} %{time_total}s]\n" -o out.json "$J/anime/52991" || echo "[curl fallito]"
-          jq -c '.data|{mal_id,title,score,scored_by}' out.json 2>/dev/null || head -c 400 out.json
-          sleep 1.5
-          echo "== episodi 52991"
-          curl -s --max-time 25 -w "\n[http %{http_code} %{time_total}s]\n" -o out.json "$J/anime/52991/episodes" || echo "[curl fallito]"
-          jq -c '{keys:(.data[0]|keys), first:.data[0], last:.data[-1], pagination}' out.json 2>/dev/null || head -c 400 out.json
-      - name: r/anime Awards
+          set +e
+          curl -sL --max-time 120 -o db.json "https://github.com/manami-project/anime-offline-database/releases/latest/download/anime-offline-database-minified.json"
+          echo "http size: $(wc -c < db.json)"
+          head -c 300 db.json; echo
+          jq -c '{keys: (.|keys), lastUpdate, n: (.data|length), first: .data[0]}' db.json | head -c 3000; echo
+          echo "== con score"; jq '[.data[] | select(.score != null)] | length' db.json
+          echo "== Frieren"; jq -c '.data[] | select(.sources | index("https://anilist.co/anime/154587")) | {title, type, episodes, animeSeason, score, tags: .tags[0:5]}' db.json
+          echo "== Steins;Gate"; jq -c '.data[] | select(.sources | index("https://myanimelist.net/anime/9253")) | {title, score, sources}' db.json
+          echo "== file della release"
+          curl -sL --max-time 30 "https://api.github.com/repos/manami-project/anime-offline-database/releases/latest" | jq -c '[.assets[] | {name, size}]'
+      - name: Jikan (di nuovo)
         if: always()
         run: |
-          curl -sL --max-time 25 https://r-anime.github.io/animeawards/ -o awards.html || echo "[awards: curl fallito]"
-          echo "dimensione: $(wc -c < awards.html)"
-          head -c 3000 awards.html; echo
-          echo "== link"
-          grep -oE '(src|href)="[^"]+"' awards.html | sort -u | head -60 || true
-          for f in $(grep -oE 'src="[^"]+\.js"' awards.html | sed 's/src="//; s/"$//' | head -6 || true); do
-            case "$f" in http*) url="$f";; /*) url="https://r-anime.github.io$f";; *) url="https://r-anime.github.io/animeawards/$f";; esac
-            echo "== js $url"
-            curl -sL --max-time 25 "$url" | grep -oE "[\"'][^\"' ]*\.json[\"']" | sort -u | head -40 || true
+          set +e
+          for u in "https://api.jikan.moe/v4/anime/52991" "https://api.jikan.moe/v4/anime/52991/episodes"; do
+            echo "== $u"
+            curl -s --max-time 25 -w "\n[http %{http_code} %{time_total}s]\n" -o out.json "$u"
+            jq -c '.data | if type == "array" then {keys: (.[0]|keys), first: .[0]} else {mal_id, score, scored_by} end' out.json 2>/dev/null || head -c 300 out.json
+            sleep 2
           done
+      - name: r/anime Awards (dati)
+        if: always()
+        run: |
+          set +e
+          curl -sL --max-time 25 https://r-anime.github.io/animeawards/index.js -o index.js
+          echo "index.js: $(wc -c < index.js)"
+          grep -oE "(fetch|axios[.a-z]*|import|require)\([^)]{0,120}\)" index.js | sort -u | head -40
+          grep -oE "[\"'][^\"' ]*(data|results|json|\.js)[^\"' ]*[\"']" index.js | sort -u | head -60
+          head -c 1500 index.js; echo
