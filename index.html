@@ -30,7 +30,6 @@
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
-    <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 2M9.5 2.5h5M19 6l1.5-1.5"/></symbol>
     <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.8v12.4a.8.8 0 0 0 1.2.7l10-6.2a.8.8 0 0 0 0-1.4l-10-6.2A.8.8 0 0 0 8 5.8Z"/></symbol>
     <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M7 3.5h10a1 1 0 0 1 1 1v16l-6-4.2-6 4.2v-16a1 1 0 0 1 1-1Z"/></symbol>
     <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4.5 19.5h4l10-10a2.1 2.1 0 0 0-3-3l-10 10Zm9-11.5 3 3"/></symbol>
@@ -44,7 +43,6 @@
     <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14.5 4.5h3a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-3M10 16.5 5.5 12 10 7.5M5.5 12H15"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 19.5h14"/></symbol>
     <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 19.5h14"/></symbol>
-    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 2.8 19.5h18.4Z"/><path d="M12 10v4.5m0 2.8v.2"/></symbol>
     <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.5"/><path d="M2.8 19.5c1-3.3 3.4-5 6.2-5s5.2 1.7 6.2 5M15.6 5.2a3.5 3.5 0 0 1 0 6.6M17.8 14.9c1.6.7 2.8 2.2 3.4 4.6"/></symbol>
     <symbol id="i-send" viewBox="0 0 24 24"><path d="M20.5 3.5 10.2 13.8M20.5 3.5 14 20.5l-3.8-6.7-6.7-3.8Z"/></symbol>
     <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m14.5 6-6 6 6 6"/></symbol>
@@ -79,8 +77,6 @@
 
   <div id="hero"></div>
   <main id="grid" class="grid" aria-live="polite"></main>
-
-  <div class="timer-bar" id="timerBar" role="status" hidden></div>
 
   <!-- Ricerca -->
   <section class="sheet" id="searchSheet" aria-hidden="true">
@@ -139,15 +135,6 @@
     </div>
   </section>
 
-  <!-- Riepilogo del timer -->
-  <section class="sheet" id="sessionSheet" aria-hidden="true">
-    <div class="sheet-backdrop" data-close></div>
-    <div class="sheet-panel session-panel">
-      <div class="sheet-handle"></div>
-      <div id="sessionBody"></div>
-    </div>
-  </section>
-
   <!-- Menu -->
   <section class="sheet" id="menuSheet" aria-hidden="true">
     <div class="sheet-backdrop" data-close></div>
@@ -167,7 +154,7 @@
       </label>
       <p class="menu-note" id="storageNote">I dati restano salvati solo su questo dispositivo. Fai ogni tanto un backup.</p>
       <p class="menu-note" id="dbInfo"></p>
-      <p class="menu-note">Animeteca · versione 15</p>
+      <p class="menu-note">Animeteca · versione 16</p>
     </div>
   </section>
 
@@ -175,7 +162,6 @@
 
   <script src="config.js"></script>
   <script src="sync-core.js"></script>
-  <script src="saturn.js" data-define-only></script>
   <script src="app.js"></script>
 </body>
 </html>

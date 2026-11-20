@@ -45,17 +45,9 @@ Nell'app, sotto ogni descrizione tradotta, "Mostra l'originale" fa vedere il tes
 mentre scrivi e si sincronizzano tra i dispositivi; se scrivi su due dispositivi vince l'ultima nota).
 La prima riga della nota compare anche in "Continua a guardare".
 
-Con il pulsante **📊** vedi le **statistiche**: tempo passato sugli anime, episodi visti, oggi /
-settimana / mese, grafico degli ultimi 7 giorni e generi preferiti.
-
-**Timer di visione** (funziona anche con Brave): nella scheda di un anime premi **⏱ Inizia a guardare**,
-poi passa alla scheda dove guardi l'episodio. L'app conta il tempo in cui sei fuori e, quando torni,
-ti chiede quanto hai guardato e quanti episodi segnare. Le uscite sotto il minuto non contano; se
-resti via più di 3 ore ti avvisa che forse hai dimenticato il timer acceso.
-
-**Tempo automatico su AnimeSaturn** (segnalibro 🪐): in 📊 → *Tempo automatico su AnimeSaturn* copi
-un segnalibro speciale e lo salvi in Brave. Toccandolo su una pagina di AnimeSaturn compare un contatore
-che va solo mentre la pagina è visibile; con **Invia** il tempo passa nelle statistiche dell'app.
+Con il pulsante delle **statistiche** vedi quanto tempo passi a guardare anime: totale, oggi,
+settimana e mese, grafico degli ultimi 7 giorni, episodi visti e generi preferiti. Il tempo è
+**stimato dagli episodi che segni**: ogni episodio conta per la sua durata (di solito 23–24 minuti).
 
 È una **PWA** (Progressive Web App): si installa sulla schermata Home e si apre a schermo intero come
 un'app normale, anche offline. I dati restano salvati sul telefono; dal menu **⋯** puoi esportare e

@@ -460,7 +460,6 @@
       .filter(Boolean)
       .join(" · ");
     const finished = a.episodes && a.ep >= a.episodes;
-    const timerOn = session && session.id === a.id;
     box.innerHTML = `
       <section class="hero-cw" data-hero="${esc(a.id)}">
         <img class="hero-bg" src="${esc(cover(a))}" data-t="${esc(a.title)}" alt="">
@@ -475,7 +474,6 @@
           </div>
           <div class="hero-actions">
             ${finished ? "" : `<button class="btn btn-primary" data-hero-plus>${icon("check")}Ho visto l'ep. ${a.ep + 1}</button>`}
-            <button class="btn btn-ghost" data-hero-timer>${icon("timer")}${timerOn ? "Timer attivo" : "Timer"}</button>
           </div>
         </div>
       </section>
@@ -626,7 +624,6 @@
             .join("")}
         </div>
         ${episodes}
-        ${saved ? timerButton(item) : ""}
         ${saved ? ratingSection(item) : ""}
         ${saved ? notesSection(item) : ""}
         ${recommendButton()}
@@ -918,11 +915,6 @@
       if (item.status === "watching") toast(`${item.title} · ep. ${epLabel(item)}`);
       return;
     }
-    if (e.target.closest("[data-hero-timer]")) {
-      if (session) openSessionSheet(false);
-      else startSession(item);
-      return renderHero();
-    }
     showDetail(item);
   });
 
@@ -984,11 +976,6 @@
       showOriginal = showOriginal === openItem.id ? null : openItem.id;
       return renderDetail();
     }
-    if (e.target.closest("#timerDetail")) {
-      if (session) openSessionSheet(false);
-      else startSession(findItem(openItem.id));
-      return renderDetail();
-    }
     const st = e.target.closest("[data-status]");
     if (st) return setStatus(openItem, st.dataset.status);
     const season = e.target.closest("[data-season]");
@@ -1018,62 +1005,6 @@
     const m = min % 60;
     return h ? `${h} h${m ? " " + m + " min" : ""}` : `${m} min`;
   };
-
-  const localDate = (d = new Date()) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
-  // Riquadro "tempo reale": sessioni del timer + segnalibro + aggiunte a mano
-  let manualOpen = false; // la sezione "a mano" resta aperta dopo un inserimento
-  let bmOpen = false;
-  function realSection() {
-    const now = new Date();
-    const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const sum = (from) => real.filter((e) => e.t >= from).reduce((n, e) => n + e.m, 0);
-    const total = real.reduce((n, e) => n + e.m, 0);
-    const recent = [...real].sort((a, b) => b.t - a.t).slice(0, 6);
-    const day = (t) => new Date(t).toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" });
-    const srcIcon = (s) => icon(s === "timer" ? "timer" : s === "saturn" ? "bookmark" : "pencil");
-    return `
-      <p class="eyebrow stats-sec">Tempo reale</p>
-      <div class="big-stat real"><div class="num display">${esc(fmtTime(total))}</div><div class="cap">${
-        real.length
-          ? `${esc(fmtTime(sum(t0)))} oggi · ${esc(fmtTime(sum(t0 - 6 * 86400000)))} negli ultimi 7 giorni`
-          : "Misurato con il timer o con il segnalibro di AnimeSaturn."
-      }</div></div>
-      ${
-        session
-          ? `<button class="timer-btn on" id="timerStats">${icon("timer")}Timer attivo${session.title ? ` · ${esc(session.title)}` : ""}</button>`
-          : `<button class="timer-btn" id="timerStats">${icon("timer")}Avvia il timer</button>`
-      }
-      ${recent
-        .map(
-          (e) => `<div class="real-row">${srcIcon(e.s)}<span>${esc(day(e.t))}${e.title ? ` · ${esc(e.title)}` : ""}</span><b>${esc(fmtTime(e.m))}</b><button data-real-del="${e.t}" aria-label="Elimina">${icon("close")}</button></div>`
-        )
-        .join("")}
-      <details class="manual bm" ${bmOpen ? "open" : ""}>
-        <summary>Tempo automatico su AnimeSaturn${icon("chevron-down", "chev")}</summary>
-        <ol class="steps">
-          <li>Tocca <b>Copia segnalibro</b> qui sotto.</li>
-          <li>In Brave salva nei segnalibri una pagina qualsiasi.</li>
-          <li>Apri i <b>Segnalibri</b>, tocca la matita e poi il segnalibro nuovo: come nome scrivi <b>Anime</b>, nell'indirizzo cancella tutto e incolla.</li>
-          <li>Su AnimeSaturn, quando inizi un episodio, apri i Segnalibri e tocca <b>Anime</b>: in basso compare un contatore che va solo mentre la pagina è davanti a te.</li>
-          <li>Quando vuoi, tocca <b>Invia</b> sul contatore: il tempo arriva qui.</li>
-        </ol>
-        <button type="button" class="real-add" id="copyBm">${icon("bookmark")}Copia segnalibro</button>
-        <textarea class="bm-code" id="bmCode" readonly rows="3">${esc(bookmarkletCode())}</textarea>
-        <button type="button" class="link-btn" id="copyBmLong">Brave non salva il segnalibro? Prova la versione lunga</button>
-      </details>
-      <details class="manual" ${manualOpen ? "open" : ""}>
-        <summary>Aggiungi tempo a mano${icon("chevron-down", "chev")}</summary>
-        <form class="real-form" id="realForm">
-          <label>Giorno<input type="date" name="day" value="${localDate()}" max="${localDate()}" required></label>
-          <label>Ore<input type="number" name="h" min="0" max="24" inputmode="numeric" placeholder="0"></label>
-          <label>Min<input type="number" name="min" min="0" max="59" inputmode="numeric" placeholder="0"></label>
-          <button type="submit" class="real-add">Aggiungi</button>
-        </form>
-      </details>
-      <p class="stats-note">Il timer: premi <b>Inizia a guardare</b> nella scheda di un anime, poi passa alla scheda dove guardi. L'app conta il tempo in cui sei fuori e, quando torni, ti chiede quanto hai visto.</p>`;
-  }
 
   function renderStats() {
     const box = $("#stats");
@@ -1111,7 +1042,7 @@
     const maxDay = Math.max(1, ...days.map((d) => d.min));
 
     if (!totalEps) {
-      box.innerHTML = `<div class="empty">${icon("chart")}<h3 class="display">Ancora nessun dato</h3><p>Segna gli episodi che guardi: qui vedrai quanto tempo passi sugli anime.</p></div>${realSection()}`;
+      box.innerHTML = `<div class="empty">${icon("chart")}<h3 class="display">Ancora nessun dato</h3><p>Segna gli episodi che guardi: qui vedrai quanto tempo passi sugli anime.</p></div>`;
       return;
     }
 
@@ -1148,52 +1079,11 @@
             <em>${esc(d.label)}</em></div>`
         )
         .join("")}</div>
-      ${realSection()}
       ${topGenres.length ? `<p class="eyebrow stats-sec">Generi più visti</p>${topGenres
         .map(([g, n]) => `<div class="genre-row"><span class="g-name">${esc(genreLabel(g))}</span><span class="g-bar"><i style="width:${(n / maxG) * 100}%"></i></span><span class="g-val">${n} ep.</span></div>`)
         .join("")}` : ""}
       <p class="stats-note">Tempo stimato: ogni episodio segnato conta per la sua durata (di solito 23–24 minuti). Oggi, settimana e mese dipendono da quando hai segnato gli episodi.</p>`;
   }
-
-  $("#stats").addEventListener("submit", (e) => {
-    if (e.target.id !== "realForm") return;
-    e.preventDefault();
-    const f = new FormData(e.target);
-    const m = (parseInt(f.get("h"), 10) || 0) * 60 + (parseInt(f.get("min"), 10) || 0);
-    const [y, mo, d] = String(f.get("day")).split("-").map(Number);
-    if (!m || !y) return toast("Inserisci ore o minuti");
-    const t = new Date(y, mo - 1, d, 12).getTime();
-    // Un solo valore manuale per giorno: se esiste già, lo sostituisce (le sessioni del timer restano)
-    real = real.filter((x) => x.s === "timer" || localDate(new Date(x.t)) !== localDate(new Date(t)));
-    real.push({ t, m, s: "manual", u: Date.now() });
-    saveReal();
-    toast(`Aggiunto: ${fmtTime(m)}`);
-    renderStats();
-  });
-  $("#stats").addEventListener(
-    "toggle",
-    (e) => {
-      if (e.target.classList?.contains("bm")) bmOpen = e.target.open;
-      else if (e.target.classList?.contains("manual")) manualOpen = e.target.open;
-    },
-    true
-  );
-  $("#stats").addEventListener("click", (e) => {
-    if (e.target.closest("#copyBm")) return copyBookmarklet(false);
-    if (e.target.closest("#copyBmLong")) return copyBookmarklet(true);
-    if (e.target.closest("#timerStats")) {
-      if (session) openSessionSheet(false);
-      else startSession(null);
-      return renderStats();
-    }
-    const del = e.target.closest("[data-real-del]");
-    if (!del) return;
-    for (const x of real) if (String(x.t) === del.dataset.realDel) deleted.real[`${x.s || "manual"}|${x.t}`] = Date.now();
-    saveDeleted();
-    real = real.filter((x) => String(x.t) !== del.dataset.realDel);
-    saveReal();
-    renderStats();
-  });
 
   $("#statsBtn").addEventListener("click", () => {
     loadDB().catch(() => {}).then(() => {
@@ -1203,262 +1093,14 @@
     openSheet("#statsSheet");
   });
 
-  // ---------- Segnalibro per AnimeSaturn ----------
-  // Il cronometro vero è in saturn.js. Il segnalibro "corto" lo carica dal sito
-  // (Brave per iPad non salva segnalibri troppo lunghi); quello "lungo" lo contiene tutto.
+  // Indirizzo dell'app (serve al link d'invito della Community)
   const appUrl = () => location.origin + location.pathname.replace(/index\.html$/, "");
 
-  function bookmarkletCode() {
-    const code =
-      "(function(){var s=document.createElement('script');s.src='" + appUrl() + "saturn.js?v='+Date.now();" +
-      "(document.body||document.documentElement).appendChild(s);})()";
-    return "javascript:" + encodeURIComponent(code);
-  }
-
-  function longBookmarkletCode() {
-    if (!window.saturnBookmarklet) return "";
-    // spazi compressi per un codice più corto (la funzione usa sempre il ";" e non ha commenti "//")
-    const src = window.saturnBookmarklet.toString().replace(/\s+/g, " ");
-    return "javascript:" + encodeURIComponent("(" + src + ")(" + JSON.stringify(appUrl()) + ");void 0");
-  }
-
-  function copyBookmarklet(long) {
-    const code = long ? longBookmarkletCode() : bookmarkletCode();
-    const fallback = () => {
-      const ta = $("#bmCode");
-      ta.value = code;
-      ta.focus();
-      ta.select();
-      ta.setSelectionRange(0, code.length);
-      let ok = false;
-      try {
-        ok = document.execCommand("copy");
-      } catch {
-        /* nessuna copia automatica */
-      }
-      toast(ok ? "Segnalibro copiato!" : "Seleziona il testo qui sotto e copialo");
-    };
-    const done = () => toast(long ? "Versione lunga copiata!" : "Segnalibro copiato!");
-    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(code).then(done, fallback);
-    else fallback();
-  }
-
-  // L'Animeteca aperta dal pulsante "Invia" del segnalibro: ?saturn={h: sito, d: {giorno: secondi}}
-  function importSaturn() {
-    const raw = new URLSearchParams(location.search).get("saturn");
-    if (!raw) return;
-    history.replaceState(null, "", location.pathname);
-    let data;
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      return toast("Dati di AnimeSaturn non validi");
-    }
-    const host = String(data?.h || "animesaturn").slice(0, 80);
-    let days = 0;
-    let todayMin = 0;
-    for (const [day, sec] of Object.entries(data?.d || {})) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
-      const m = Math.round(Number(sec) / 60);
-      if (!(m > 0) || m > 1440) continue;
-      const [y, mo, d] = day.split("-").map(Number);
-      // Il segnalibro manda sempre il totale del giorno: sostituisce, non somma
-      real = real.filter((x) => !(x.s === "saturn" && x.day === day && x.host === host));
-      real.push({ t: new Date(y, mo - 1, d, 12).getTime(), m, s: "saturn", day, host, title: "AnimeSaturn", u: Date.now() });
-      days++;
-      if (day === localDate()) todayMin = m;
-    }
-    saveReal();
-    toast(days ? `AnimeSaturn aggiornato · oggi ${fmtTime(todayMin)}` : "Nessun tempo da importare (serve almeno 1 minuto)");
-    renderStats();
-    openSheet("#statsSheet");
-  }
-
-  // ---------- Timer di visione ----------
-  // L'app non può vedere cosa succede nelle altre schede di Brave, ma sa quando la lasci
-  // e quando ci torni: il tempo passato fuori, durante una visione, è il tempo di visione.
-  const SESSION_KEY = "animeteca.session.v1";
-  const MIN_AWAY_MS = 60 * 1000; // uscite brevi (meno di 1 minuto) non contano
-  const LONG_AWAY_MS = 3 * 3600 * 1000; // oltre 3 ore probabilmente il timer è stato dimenticato
-  let session = loadSession();
-  let sessionEps = 0;
-
-  function loadSession() {
-    try {
-      const d = JSON.parse(localStorage.getItem(SESSION_KEY));
-      return d && d.start ? d : null;
-    } catch {
-      return null;
-    }
-  }
-  function saveSession() {
-    try {
-      if (session) localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-      else localStorage.removeItem(SESSION_KEY);
-    } catch {
-      /* senza memoria il timer vale solo finché la pagina resta aperta */
-    }
-  }
-
-  function timerButton(item) {
-    if (!session) return `<button class="timer-btn" id="timerDetail">${icon("timer")}Inizia a guardare</button>`;
-    if (session.id === item.id) return `<button class="timer-btn on" id="timerDetail">${icon("timer")}Timer attivo · Termina</button>`;
-    return `<button class="timer-btn" id="timerDetail">${icon("timer")}Timer attivo su ${esc(session.title || "un altro anime")} · Chiudilo</button>`;
-  }
-
-  function startSession(item) {
-    session = { start: Date.now(), id: item?.id || null, title: item?.title || "", awayMs: 0, hiddenAt: null, lastAway: 0 };
-    saveSession();
-    renderTimer();
-    toast("Timer avviato. Ora vai a guardare.");
-  }
-
-  function endSession() {
-    session = null;
-    saveSession();
-    closeSheet("#sessionSheet");
-    renderTimer();
-    renderAll();
-    if ($("#statsSheet").classList.contains("open")) renderStats();
-  }
-
-  function onHide() {
-    flushNote();
-    if (session && !session.hiddenAt) {
-      session.hiddenAt = Date.now();
-      saveSession();
-    }
-  }
-  function onShow() {
-    if (!session || !session.hiddenAt) return;
-    const away = Date.now() - session.hiddenAt;
-    session.hiddenAt = null;
-    if (away >= MIN_AWAY_MS) {
-      session.awayMs += away;
-      session.lastAway = away;
-      saveSession();
-      renderTimer();
-      openSessionSheet(true);
-    } else {
-      saveSession();
-    }
-  }
-  document.addEventListener("visibilitychange", () => (document.hidden ? onHide() : onShow()));
-  window.addEventListener("pagehide", onHide);
-  window.addEventListener("pageshow", () => {
-    if (!document.hidden) onShow();
+  // Se esci dall'app mentre scrivi una nota o una recensione, si salva subito
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) flushNote();
   });
-
-  // Barra in basso "in riproduzione", visibile mentre il timer è attivo
-  function renderTimer() {
-    const bar = $("#timerBar");
-    document.body.classList.toggle("timer-on", Boolean(session));
-    if (!session) {
-      bar.hidden = true;
-      renderHero();
-      return;
-    }
-    const item = session.id ? findItem(session.id) : null;
-    const min = Math.round(session.awayMs / 60000);
-    bar.hidden = false;
-    bar.innerHTML = `${
-      item
-        ? `<img class="t-thumb" src="${esc(cover(item))}" data-t="${esc(item.title)}" alt="">`
-        : `<span class="t-icon">${icon("timer")}</span>`
-    }
-      <div class="t-text"><b>${esc(session.title || "Timer di visione")}</b><span><i class="t-dot"></i>${
-        min ? `${esc(fmtTime(min))} contati finora` : "In attesa: vai a guardare l'episodio"
-      }</span></div>
-      <button id="timerEnd" class="btn btn-primary">Termina</button>`;
-    renderHero();
-  }
-  $("#timerBar").addEventListener("click", (e) => {
-    if (e.target.closest("#timerEnd")) openSessionSheet(false);
-  });
-
-  // Riepilogo: quanto hai guardato e quanti episodi
-  function openSessionSheet(fromReturn) {
-    if (!session) return;
-    const item = session.id ? findItem(session.id) : null;
-    const total = Math.round(session.awayMs / 60000);
-    const last = Math.round(session.lastAway / 60000);
-    const forgot = session.lastAway > LONG_AWAY_MS;
-    const remaining = item?.episodes ? item.episodes - item.ep : Infinity;
-    sessionEps = item && !forgot ? Math.min(remaining, Math.round(total / durationOf(item))) : 0;
-
-    let lead;
-    if (!total) lead = "Non sei ancora uscito dall'app, quindi non c'è niente da contare. Se hai guardato, scrivi i minuti qui sotto.";
-    else if (fromReturn && total !== last) lead = `Sei stato via <b>${esc(fmtTime(last))}</b>. In tutto, per questa visione: <b>${esc(fmtTime(total))}</b>.`;
-    else lead = `${fromReturn ? "Sei stato via" : "Tempo contato"}: <b>${esc(fmtTime(total))}</b>.`;
-
-    $("#sessionBody").innerHTML = `
-      <h2 class="s-title display">${fromReturn ? "Bentornato" : "Fine visione"}</h2>
-      <p class="s-lead">${lead}</p>
-      ${forgot ? `<p class="s-warn">${icon("alert")}<span>Sei stato via parecchio: forse hai lasciato il timer acceso. Correggi i minuti qui sotto.</span></p>` : ""}
-      <label class="s-field"><span class="eyebrow">Minuti guardati</span><input type="number" id="sessMin" min="0" max="1440" inputmode="numeric" value="${total || ""}" placeholder="0"></label>
-      ${
-        item
-          ? `<div class="episodes s-eps">
-              <div>
-                <div class="label">Episodi di ${esc(item.title)}</div>
-                <div class="count display" id="sessEps">${sessionEps}</div>
-                <div class="eps-to" id="sessEpsTo"></div>
-              </div>
-              <div class="stepper">
-                <button data-sess-ep="-1" aria-label="Un episodio in meno">${icon("minus")}</button>
-                <button data-sess-ep="1" class="plus" aria-label="Un episodio in più">${icon("plus")}</button>
-              </div>
-            </div>`
-          : ""
-      }
-      <button class="real-add" id="sessSave">Salva</button>
-      <button class="s-secondary" id="sessContinue">Sto ancora guardando</button>
-      <button class="remove-btn" id="sessDiscard">Scarta il timer</button>`;
-    updateSessionEps();
-    openSheet("#sessionSheet");
-  }
-
-  function updateSessionEps() {
-    const item = session?.id ? findItem(session.id) : null;
-    if (!item) return;
-    $("#sessEps").textContent = sessionEps;
-    const to = item.episodes ? Math.min(item.episodes, item.ep + sessionEps) : item.ep + sessionEps;
-    $("#sessEpsTo").textContent = `ep. ${item.ep} → ${to}${item.episodes ? " / " + item.episodes : ""}`;
-  }
-
-  $("#sessionSheet").addEventListener("click", (e) => {
-    if (!session) return;
-    const item = session.id ? findItem(session.id) : null;
-    const step = e.target.closest("[data-sess-ep]");
-    if (step && item) {
-      const remaining = item.episodes ? item.episodes - item.ep : Infinity;
-      sessionEps = Math.max(0, Math.min(remaining, sessionEps + Number(step.dataset.sessEp)));
-      return updateSessionEps();
-    }
-    if (e.target.closest("#sessContinue")) {
-      closeSheet("#sessionSheet");
-      return renderTimer();
-    }
-    if (e.target.closest("#sessDiscard")) {
-      if (confirm("Scartare questo timer? Il tempo non verrà salvato.")) {
-        endSession();
-        toast("Timer scartato");
-      }
-      return;
-    }
-    if (e.target.closest("#sessSave")) {
-      const m = Math.max(0, Math.min(1440, parseInt($("#sessMin").value, 10) || 0));
-      if (m) {
-        real.push({ t: Date.now(), m, s: "timer", id: session.id, title: session.title, u: Date.now() });
-        saveReal();
-      }
-      const eps = item ? sessionEps : 0;
-      if (eps) setEpisode(item, item.ep + eps);
-      const parts = [m && fmtTime(m), eps && `+${eps} ${eps === 1 ? "episodio" : "episodi"}`].filter(Boolean);
-      endSession();
-      toast(parts.length ? `Salvato: ${parts.join(" · ")}` : "Timer chiuso");
-    }
-  });
+  window.addEventListener("pagehide", flushNote);
 
   // ---------- Account e sincronizzazione ----------
   // Con l'account (Supabase) la lista è la stessa su iPhone, iPad, ecc.
@@ -1503,7 +1145,6 @@
       applyingRemote = false;
     }
     renderAll();
-    renderTimer();
     if ($("#statsSheet").classList.contains("open")) renderStats();
   }
 
@@ -2631,9 +2272,6 @@
 
   // ---------- Avvio ----------
   renderAll();
-  renderTimer();
-  if (!document.hidden) onShow();
-  importSaturn();
   readInvite();
   renderAccount();
   renderBadge();
