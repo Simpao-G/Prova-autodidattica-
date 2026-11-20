@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Prova AnimeSaturn · Animeteca</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#0b0b0c">
+  <!-- PAGINA DI PROVA, DA BUTTARE DOPO IL TEST: AnimeSaturn dentro Animeteca, con un contatore
+       che va solo mentre la pagina è sullo schermo. Non fa parte dell'app. -->
+  <style>
+    @font-face { font-family: "Archivo"; src: url("fonts/archivo.woff2") format("woff2"); font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; }
+    :root {
+      --bg: #0b0b0c; --elev: #141416; --surface: #1b1b1e; --line: rgba(255, 255, 255, 0.12);
+      --text: #f4f3ef; --text-2: #a8a7a1; --text-3: #6f6e69; --accent: #f5c542; --ink: #17140a;
+      --safe-top: env(safe-area-inset-top, 0px); --safe-bottom: env(safe-area-inset-bottom, 0px);
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+    html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+    body { font: 400 15px/1.5 "Archivo", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    button, input { font: inherit; color: inherit; }
+    [hidden] { display: none !important; }
+
+    .setup { max-width: 560px; margin: 0 auto; padding: calc(28px + var(--safe-top)) 20px calc(40px + var(--safe-bottom)); }
+    .eyebrow { margin: 0; color: var(--accent); font-size: 11px; font-weight: 650; letter-spacing: 0.12em; text-transform: uppercase; }
+    h1 { margin: 8px 0 10px; font-size: 34px; font-stretch: 72%; font-weight: 800; line-height: 1; letter-spacing: -0.01em; }
+    p { margin: 0 0 14px; color: var(--text-2); }
+    p b { color: var(--text); font-weight: 650; }
+    input {
+      display: block; width: 100%; height: 48px; margin: 6px 0 10px; padding: 0 14px;
+      border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 16px;
+      -webkit-appearance: none; appearance: none;
+    }
+    input:focus { outline: none; border-color: var(--accent); }
+    .btn { display: flex; align-items: center; justify-content: center; width: 100%; height: 48px; border-radius: 10px; font-weight: 700; cursor: pointer; }
+    .primary { border: 0; background: var(--accent); color: var(--ink); }
+    .ghost { margin-top: 8px; border: 1px solid var(--line); background: none; }
+    .small { margin-top: 8px; color: var(--text-3); font-size: 13px; }
+    .card { margin-top: 22px; padding: 16px 18px; border-radius: 14px; background: var(--surface); }
+    .card h2 { margin: 0 0 8px; font-size: 13px; font-weight: 650; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-2); }
+    .card ol { margin: 0; padding-left: 20px; }
+    .card li { margin: 6px 0; }
+    .result { border: 1px solid var(--accent); }
+    .result .big { display: block; margin: 2px 0 6px; font-size: 40px; font-stretch: 72%; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+    .result p { margin: 0; }
+
+    .player { position: fixed; inset: 0; background: #000; }
+    .bar {
+      position: absolute; top: 0; left: 0; right: 0; z-index: 2;
+      display: flex; align-items: center; gap: 10px;
+      height: calc(50px + var(--safe-top)); padding: var(--safe-top) 12px 0 14px;
+      background: var(--elev); border-bottom: 1px solid var(--line);
+    }
+    .dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--accent); animation: pulse 1.6s ease-in-out infinite; }
+    .dot.off { background: var(--text-3); animation: none; }
+    @keyframes pulse { 50% { opacity: 0.35; } }
+    .time { font-size: 18px; font-weight: 750; font-variant-numeric: tabular-nums; }
+    .state { color: var(--text-2); font-size: 13px; white-space: nowrap; }
+    .spacer { flex: 1; }
+    .link { color: var(--text-2); font-size: 13px; text-decoration: underline; white-space: nowrap; }
+    .done { flex: none; height: 34px; padding: 0 14px; border: 0; border-radius: 9px; background: var(--accent); color: var(--ink); font-size: 14px; font-weight: 700; cursor: pointer; }
+    iframe { position: absolute; top: calc(50px + var(--safe-top)); left: 0; width: 100%; height: calc(100% - 50px - var(--safe-top)); border: 0; background: #fff; }
+    @media (max-width: 380px) { .state { display: none; } }
+  </style>
+</head>
+<body>
+  <main class="setup" id="setup">
+    <p class="eyebrow">Prova · da buttare dopo il test</p>
+    <h1>AnimeSaturn dentro Animeteca</h1>
+    <p>Apri AnimeSaturn in Brave, tocca la barra degli indirizzi e copia l'indirizzo. Poi incollalo qui sotto e tocca <b>Apri qui dentro</b>.</p>
+    <input id="url" type="url" inputmode="url" placeholder="Incolla qui l'indirizzo di AnimeSaturn" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+    <button class="btn primary" id="go">Apri qui dentro</button>
+    <button class="btn ghost" id="goSafe">Apri in modalità protetta</button>
+    <p class="small">Usa la modalità protetta solo se con la prima una pubblicità ti porta su un altro sito: la protetta lo impedisce, ma qualche video potrebbe non partire.</p>
+
+    <div class="card result" id="result" hidden></div>
+
+    <div class="card">
+      <h2>Poi rispondimi in chat</h2>
+      <ol>
+        <li>Vedi il sito di AnimeSaturn qui dentro?</li>
+        <li>Il video parte?</li>
+        <li>Va a tutto schermo?</li>
+        <li>Dopo il tutto schermo, il contatore era andato avanti?</li>
+        <li>Se vai su WhatsApp e poi torni, il contatore si era fermato?</li>
+      </ol>
+      <p class="small">Se puoi, prova su iPad, iPhone e computer.</p>
+    </div>
+  </main>
+
+  <div class="player" id="player" hidden>
+    <header class="bar">
+      <span class="dot" id="dot"></span>
+      <span class="time" id="time">0:00</span>
+      <span class="state" id="state">sto contando</span>
+      <span class="spacer"></span>
+      <a class="link" id="outside" target="_blank" rel="noopener">Apri fuori</a>
+      <button class="done" id="done">Ho finito</button>
+    </header>
+  </div>
+
+  <script>
+    (() => {
+      "use strict";
+      const $ = (s) => document.querySelector(s);
+      const KEY = "animeteca.saturnUrl";
+      const input = $("#url");
+      try {
+        input.value = localStorage.getItem(KEY) || "";
+      } catch {
+        /* niente memoria: si incolla ogni volta */
+      }
+
+      let frame = null;
+      let total = 0; // millisecondi contati (solo con la pagina sullo schermo)
+      let last = 0;
+      let timer = null;
+      let pauses = 0;
+      let loads = 0;
+      let safe = false;
+
+      const visible = () => document.visibilityState === "visible";
+      const fmt = (ms) => {
+        const s = Math.floor(ms / 1000);
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const x = String(s % 60).padStart(2, "0");
+        return h ? `${h}:${String(m).padStart(2, "0")}:${x}` : `${m}:${x}`;
+      };
+      const words = (ms) => {
+        const min = Math.round(ms / 60000);
+        if (ms < 60000) return `${Math.floor(ms / 1000)} secondi`;
+        const h = Math.floor(min / 60);
+        return h ? `${h} h ${min % 60} min` : `${min} min`;
+      };
+
+      function address(v) {
+        v = String(v || "").trim();
+        if (!v) return "";
+        if (!/^https?:\/\//i.test(v)) v = "https://" + v;
+        v = v.replace(/^http:\/\//i, "https://"); // la pagina è https: anche il sito dentro deve esserlo
+        try {
+          return new URL(v).href;
+        } catch {
+          return "";
+        }
+      }
+
+      // Conta solo i secondi in cui la pagina è davanti a te; i salti lunghi (telefono bloccato) non contano
+      function tick() {
+        const now = Date.now();
+        if (visible() && last) total += Math.min(now - last, 5000);
+        last = now;
+        $("#time").textContent = fmt(total);
+      }
+      function showState() {
+        $("#state").textContent = visible() ? "sto contando" : "in pausa";
+        $("#dot").classList.toggle("off", !visible());
+      }
+
+      function open(isSafe) {
+        const url = address(input.value);
+        if (!url) {
+          input.focus();
+          alert("Incolla prima l'indirizzo di AnimeSaturn.");
+          return;
+        }
+        try {
+          localStorage.setItem(KEY, url);
+        } catch {
+          /* non importa */
+        }
+        safe = isSafe;
+        frame = document.createElement("iframe");
+        frame.setAttribute("allow", "fullscreen; autoplay; encrypted-media; picture-in-picture");
+        frame.setAttribute("allowfullscreen", "");
+        // modalità protetta: niente "allow-top-navigation", così nessuna pubblicità può portare via questa pagina
+        if (isSafe) frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation");
+        frame.addEventListener("load", () => loads++);
+        frame.src = url;
+        $("#player").appendChild(frame);
+        $("#outside").href = url;
+        $("#setup").hidden = true;
+        $("#player").hidden = false;
+        total = 0;
+        pauses = 0;
+        loads = 0;
+        last = Date.now();
+        clearInterval(timer);
+        timer = setInterval(tick, 1000);
+        tick();
+        showState();
+      }
+
+      function finish() {
+        tick();
+        clearInterval(timer);
+        timer = null;
+        if (frame) frame.remove(); // ferma anche il video
+        frame = null;
+        $("#player").hidden = true;
+        $("#setup").hidden = false;
+        const box = $("#result");
+        box.hidden = false;
+        box.innerHTML = `<h2>Risultato della prova${safe ? " (protetta)" : ""}</h2>
+          <span class="big">${fmt(total)}</span>
+          <p>Tempo contato: <b>${words(total)}</b> · pause: <b>${pauses}</b> · pagine caricate: <b>${loads}</b></p>`;
+        window.scrollTo(0, 0);
+      }
+
+      document.addEventListener("visibilitychange", () => {
+        if (!timer) return;
+        tick(); // chiude il pezzo di tempo fino a qui
+        if (!visible()) pauses++;
+        last = Date.now();
+        showState();
+      });
+      window.addEventListener("pageshow", () => {
+        if (timer) {
+          last = Date.now();
+          showState();
+        }
+      });
+
+      $("#go").addEventListener("click", () => open(false));
+      $("#goSafe").addEventListener("click", () => open(true));
+      $("#done").addEventListener("click", finish);
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") open(false);
+      });
+      for (const type of ["gesturestart", "gesturechange"]) document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+    })();
+  </script>
+</body>
+</html>
