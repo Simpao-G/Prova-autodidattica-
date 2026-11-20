@@ -70,6 +70,29 @@ Il server è un progetto gratuito di [Supabase](https://supabase.com). Per confi
 
 La logica di unione e il collegamento a Supabase sono in `sync-core.js`.
 
+## Classifiche
+
+Il pulsante con la **coppa**, in alto, apre le **Classifiche**:
+
+- **Migliori**: i 100 anime con il voto più alto, tutti i generi;
+- **Generi**: i 50 migliori per ogni genere (Azione, Commedia, Sentimentale, …);
+- **Anno**: i 50 migliori usciti in ognuno degli ultimi 5 anni.
+
+Toccando un anime si apre la sua scheda, da cui lo aggiungi alla lista; se è già nella tua lista
+vedi il suo stato. Il voto è la **media tra AniList e la media dei siti** (MyAnimeList, Kitsu, AniDB,
+Anime-Planet e altri) del database pubblico
+[anime-offline-database](https://github.com/manami-project/anime-offline-database) (licenza ODbL).
+Per evitare titoli con pochissimi voti entrano solo anime con un voto AniList e abbastanza pubblico;
+la media dei siti si usa solo per gli anime già finiti.
+
+Le classifiche (`data/rankings.json`) le ricalcola ogni lunedì lo stesso workflow del database con
+`scripts/build-rankings.mjs` (il calcolo vero è in `scripts/rankings-core.mjs`). Se la media dei siti
+non si scarica, quella settimana le classifiche usano solo AniList e l'app lo scrive.
+
+Niente classifica degli episodi né di Reddit: MyAnimeList (tramite Jikan) non risponde ai server di
+GitHub, i risultati degli r/anime Awards sono pubblicati in automatico solo per il 2017 e il 2018 e
+Reddit blocca l'accesso diretto ai suoi dati.
+
 ## Community: amici, voti e consigli
 
 Il pulsante con le due persone, in alto, apre la **Community** (serve l'account):
@@ -126,5 +149,7 @@ e apri <http://localhost:8000>.
 | `supabase/` | script SQL da eseguire una volta su Supabase (`setup.sql`, `community.sql`) |
 | `data/` | database degli anime (generato in automatico, non modificarlo a mano) |
 | `scripts/build-db.mjs` | script che crea il database da AniList |
+| `scripts/build-rankings.mjs`, `scripts/rankings-core.mjs` | classifiche settimanali (`data/rankings.json`) |
+| `tests/` | prove automatiche: `node --test tests/*.test.mjs` e `node tests/rankings-ui.cjs` |
 | `sw.js` | service worker per funzionare offline |
 | `manifest.webmanifest`, `icons/` | nome e icona dell'app installata |
