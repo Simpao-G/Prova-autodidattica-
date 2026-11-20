@@ -756,6 +756,8 @@
     renderCounts();
     renderGrid();
     if ($("#detailSheet").classList.contains("open")) renderDetail();
+    // classifiche aperte sotto la scheda: lo stato degli anime appena aggiunti si vede subito
+    if (rankings && $("#rankSheet").classList.contains("open")) renderRankings();
   }
 
   // ---------- Pannelli ----------
@@ -2258,6 +2260,10 @@
   function renderRankings() {
     const box = $("#rankBody");
     const r = rankings;
+    // la riga dei generi/anni resta dov'era quando si ridisegna la stessa scheda
+    const oldStrip = box.querySelector(".rank-chips");
+    const keepScroll = oldStrip && box.dataset.tab === rank.tab ? oldStrip.scrollLeft : 0;
+    box.dataset.tab = rank.tab;
     if (!r) {
       box.innerHTML = emptyComm(
         "trophy",
@@ -2291,6 +2297,8 @@
       <p class="stats-note">Voto: media tra AniList e la media dei siti (MyAnimeList, Kitsu, AniDB, Anime-Planet e altri) del database pubblico
         <a href="https://github.com/manami-project/anime-offline-database" target="_blank" rel="noopener">anime-offline-database</a>.
         Entrano solo anime con abbastanza voti. Aggiornate il ${dayIt(r.updated)}${r.sitesUpdated ? ` · media dei siti del ${dayIt(r.sitesUpdated)}` : ""}.</p>`;
+    const strip = box.querySelector(".rank-chips");
+    if (strip && keepScroll) strip.scrollLeft = keepScroll;
   }
 
   // Tocco su un anime: la sua scheda (dalla tua lista o dal database dell'app, altrimenti con i dati della classifica)

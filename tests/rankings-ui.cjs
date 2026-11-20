@@ -35,7 +35,12 @@ function rankingsFixture(over = {}) {
     sources: { sites: true },
     items,
     top: ["mal-52991", "mal-5114", "mal-9253", "al-777"],
-    genres: { Action: ["mal-5114", "mal-52991"], Romance: ["mal-31000"], Mystery: ["mal-9253"] },
+    genres: {
+      Action: ["mal-5114", "mal-52991"],
+      Romance: ["mal-31000"],
+      Mystery: ["mal-9253"],
+      ...Object.fromEntries(["Adventure", "Comedy", "Drama", "Fantasy", "Horror", "Mecha", "Music", "Psychological", "Sci-Fi", "Slice of Life", "Sports", "Supernatural", "Thriller"].map((g) => [g, ["mal-9253"]])),
+    },
     years: { 2026: y2026, 2025: y2025, 2024: [], 2023: ["mal-52991"], 2022: [] },
     ...over,
   };
@@ -142,6 +147,39 @@ async function openRankings(page) {
     await phone.click('#rankBody .rank-row[data-rid="al-777"]');
     await phone.waitForSelector("#detailSheet.open");
     assert.match(await text(phone, ".detail-title"), /Un titolo lunghissimo/);
+    await phone.keyboard.press("Escape");
+    await phone.waitForSelector("#detailSheet:not(.open)");
+
+    // aggiungo un anime dalla sua scheda e torno: la riga mostra subito lo stato
+    await phone.click('#rankBody .rank-row[data-rid="mal-5114"]');
+    await phone.waitForSelector("#detailSheet.open");
+    await phone.click('#detail [data-status="plan"]');
+    await phone.keyboard.press("Escape");
+    await phone.waitForSelector("#detailSheet:not(.open)");
+    assert.match(await text(phone, '#rankBody .rank-row[data-rid="mal-5114"]'), /Da vedere/, "stato aggiornato subito dopo l'aggiunta");
+
+    // la riga dei generi non torna all'inizio quando tocchi un genere in fondo
+    await phone.click('#rankBody [data-rtab="genres"]');
+    const strip = "#rankBody .rank-chips";
+    await phone.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      el.scrollLeft = el.scrollWidth;
+    }, strip);
+    const before = await phone.evaluate((sel) => document.querySelector(sel).scrollLeft, strip);
+    await phone.click("#rankBody .rank-chip >> nth=-1");
+    const after = await phone.evaluate((sel) => document.querySelector(sel).scrollLeft, strip);
+    assert.ok(before > 0 && after === before, `riga dei generi ferma dov'era (${before} -> ${after})`);
+
+    // la Community aperta mentre le Classifiche sono aperte (es. un amico toccato nella scheda) sta sopra
+    await phone.evaluate(() => document.querySelector("#commBtn").click());
+    await phone.waitForSelector("#communitySheet.open");
+    await phone.waitForTimeout(450); // fine dell'animazione del pannello
+    const communityOnTop = await phone.evaluate(() => {
+      const r = document.querySelector("#communitySheet .sheet-panel").getBoundingClientRect();
+      const el = document.elementFromPoint(r.left + r.width / 2, r.top + 40);
+      return Boolean(el && el.closest("#communitySheet"));
+    });
+    assert.ok(communityOnTop, "la Community si apre sopra le Classifiche");
     assert.deepEqual(phone.errors, [], "nessun errore nella pagina (iPhone)");
 
     // file mancante o di formato sconosciuto
