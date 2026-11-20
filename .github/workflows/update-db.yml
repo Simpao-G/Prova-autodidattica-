@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - scripts/build-db.mjs
+      - scripts/build-rankings.mjs
+      - scripts/rankings-core.mjs
       - scripts/translate.py
       - scripts/prepare-translator.sh
       - .github/workflows/update-db.yml
@@ -41,6 +43,12 @@ jobs:
       - name: Scarica gli anime da AniList
         if: github.event_name != 'workflow_dispatch' || inputs.scarica
         run: node scripts/build-db.mjs
+
+      # Classifiche (data/rankings.json): voto AniList + media dei siti del database pubblico manami-project.
+      # Se non riesce, resta il file della settimana prima.
+      - name: Calcola le classifiche
+        continue-on-error: true
+        run: node scripts/build-rankings.mjs
 
       - uses: actions/setup-python@v5
         with:

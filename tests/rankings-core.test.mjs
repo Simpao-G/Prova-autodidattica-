@@ -63,6 +63,22 @@ test("top: soglia di 20000, tipo valido, ordine per voto e a parità per popolar
   assert.deepEqual(build().top, ["al-2", "mal-107", "mal-101", "mal-104"]);
 });
 
+test("un anime senza voto AniList (non ancora uscito) non entra, anche se i siti gli danno 10", () => {
+  const items = [...index.items, [8, 108, "Hype", "", "TV", 2026, 12, "", 0, 900000, 1, 24]];
+  const r = buildRankings({ anime: animeFromIndex({ ...index, items }), genresByAl, sites: new Map([...sites, [8, 10]]), now, coverPrefix: PREFIX, sitesUpdated: null });
+  assert.ok(!r.top.includes("mal-108"));
+  assert.ok(!r.years["2026"].includes("mal-108"));
+  assert.equal(r.items["mal-108"], undefined);
+});
+
+test("due voci AniList con lo stesso id MyAnimeList: resta quella col voto più alto, senza sovrascritture", () => {
+  const items = [...index.items, [9, 101, "Alpha parte 2", "", "TV", 2021, 12, "", 70, 400000, 1, 24]];
+  const r = buildRankings({ anime: animeFromIndex({ ...index, items }), genresByAl: new Map([...genresByAl, [9, ["Action"]]]), sites, now, coverPrefix: PREFIX, sitesUpdated: null });
+  assert.equal(r.top.filter((id) => id === "mal-101").length, 1);
+  assert.equal(r.items["mal-101"][2], "Alpha");
+  assert.equal(r.items["mal-101"][0], 1);
+});
+
 test("genres: solo anime del genere sopra soglia; generi vuoti non compaiono", () => {
   const r = build();
   assert.deepEqual(r.genres.Action, ["mal-107", "mal-101", "mal-104"]);
@@ -73,7 +89,7 @@ test("genres: solo anime del genere sopra soglia; generi vuoti non compaiono", (
 test("years: anno in corso e 4 precedenti, soglia 2000", () => {
   const r = build();
   assert.deepEqual(Object.keys(r.years).sort(), ["2022", "2023", "2024", "2025", "2026"]);
-  assert.deepEqual(r.years["2026"], ["mal-104", "mal-106"]);
+  assert.deepEqual(r.years["2026"], ["mal-104"]); // Zeta non ha voto AniList
   assert.deepEqual(r.years["2022"], []);
 });
 
@@ -81,7 +97,6 @@ test("items: una riga per ogni anime citato, con i voti per fonte", () => {
   const r = build();
   assert.deepEqual(r.items["mal-101"], [1, 101, "Alpha", "TV", 2020, 24, "medium/a.jpg", 8.9, 9, 8.8]);
   assert.equal(r.items["al-2"][9], null);
-  assert.equal(r.items["mal-106"][8], null);
   const cited = new Set([...r.top, ...Object.values(r.genres).flat(), ...Object.values(r.years).flat()]);
   assert.deepEqual(new Set(Object.keys(r.items)), cited);
 });

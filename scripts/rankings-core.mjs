@@ -3,8 +3,8 @@
 // Voto di ogni anime = media tra il voto AniList (dal database dell'app, 0-100 -> 0-10) e la
 // "media dei siti" del database pubblico manami-project/anime-offline-database (MyAnimeList, AniList,
 // Kitsu, AniDB, Anime-Planet...). Se una delle due manca si usa l'altra.
-// Per entrare in classifica serve abbastanza pubblico (popolarità AniList), così un titolo
-// sconosciuto con pochi voti non finisce in cima.
+// Per entrare in classifica servono un voto AniList e abbastanza pubblico (popolarità AniList),
+// così un titolo sconosciuto o non ancora uscito non finisce in cima.
 
 // Generi di AniList usati per le classifiche (Hentai escluso; i titoli per adulti non sono nel database)
 export const GENRES = [
@@ -65,18 +65,23 @@ export function animeFromIndex(index) {
 export function buildRankings({ anime, genresByAl, sites, now, coverPrefix, sitesUpdated }) {
   const scored = [];
   for (const a of anime) {
-    if (!TYPES.has(a.type)) continue;
+    // serve un voto AniList: AniList lo mostra solo quando ci sono abbastanza voti, e così restano
+    // fuori gli anime non ancora usciti, che su qualche sito hanno già voti "di attesa"
+    if (!TYPES.has(a.type) || !(a.alScore > 0)) continue;
     const site = sites.get(a.alId) ?? null;
     const combined = combineScore(a.alScore, site);
     if (combined !== null) scored.push({ a, site, combined });
   }
   // dal voto più alto; a parità, il più seguito
   scored.sort((x, y) => y.combined - x.combined || y.a.popularity - x.a.popularity);
+  // più voci AniList possono avere lo stesso id MyAnimeList (es. le parti di una serie): resta la migliore
+  const seen = new Set();
+  const unique = scored.filter((e) => !seen.has(e.a.id) && seen.add(e.a.id));
 
   const items = {};
   const take = (keep, max) => {
     const ids = [];
-    for (const e of scored) {
+    for (const e of unique) {
       if (ids.length >= max) break;
       if (!keep(e.a)) continue;
       ids.push(e.a.id);
