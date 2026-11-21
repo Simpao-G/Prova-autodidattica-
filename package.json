@@ -1,0 +1,28 @@
+{
+  "name": "animeteca",
+  "version": "1.0.0",
+  "description": "App per il telefono per tenere traccia dei tuoi anime:",
+  "main": "app.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Simpao-G/Prova-autodidattica-.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Simpao-G/Prova-autodidattica-/issues"
+  },
+  "homepage": "https://github.com/Simpao-G/Prova-autodidattica-#readme",
+  "devDependencies": {
+    "playwright": "^1.65.1"
+  }
+}
