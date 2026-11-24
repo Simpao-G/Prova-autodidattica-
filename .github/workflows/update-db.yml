@@ -2,6 +2,8 @@ name: Aggiorna database anime
 
 on:
   push:
+    branches:
+      - claude/zealous-babbage-3wz0go
     paths:
       - scripts/build-db.mjs
       - scripts/build-rankings.mjs
