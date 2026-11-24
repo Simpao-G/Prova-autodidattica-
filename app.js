@@ -480,12 +480,79 @@
       <p class="eyebrow section-label">Tutti in corso</p>`;
   }
 
+  // ---------- Preferenze (solo su questo dispositivo: non si sincronizzano) ----------
+  const PREFS_KEY = "animeteca.prefs.v1";
+  const prefs = (() => {
+    const p = readStore(PREFS_KEY);
+    return p && typeof p === "object" && !Array.isArray(p) ? p : {};
+  })();
+
+  // ---------- Da vedere: ordinamento e tempo totale ----------
+  // Recenti = ultima modifica (l'ordine di sempre); gli anime senza il dato richiesto vanno in fondo
+  const PLAN_SORTS = [
+    ["recent", "Recenti"],
+    ["added", "Aggiunti"],
+    ["score", "Voto"],
+    ["short", "Più brevi"],
+    ["year", "Anno"],
+  ];
+  const byRecent = (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0);
+
+  // Dati utili a scegliere: dalla lista, con ripiego sul database dell'app
+  function planInfo(a) {
+    const d = db?.byId.get(a.id);
+    const episodes = Number(a.episodes) || Number(d?.episodes) || 0;
+    return {
+      episodes,
+      score: Number(a.score) || Number(d?.score) || 0,
+      year: Number(a.year) || Number(d?.year) || 0,
+      minutes: episodes ? episodes * durationOf(a) : 0, // stima: episodi x durata
+    };
+  }
+
+  function sortPlan(items) {
+    const mode = prefs.planSort;
+    const rows = items.map((a) => ({ a, ...planInfo(a) }));
+    const MISSING = 1e9;
+    const order = {
+      added: (x, y) => (y.a.addedAt || 0) - (x.a.addedAt || 0),
+      score: (x, y) => (y.score || -1) - (x.score || -1),
+      short: (x, y) => (x.minutes || MISSING) - (y.minutes || MISSING),
+      year: (x, y) => (y.year || -1) - (x.year || -1),
+    }[mode];
+    if (!order) return items;
+    return rows.sort((x, y) => order(x, y) || byRecent(x.a, y.a)).map((r) => r.a);
+  }
+
+  // Sotto il poster di un anime da vedere: "12 ep. · 4 h 48 min" (o "Film · 1 h 40 min")
+  function planSub(a) {
+    const { episodes, minutes } = planInfo(a);
+    if (!episodes) return "";
+    if (a.type === "Film" || episodes === 1) return [a.type || "Film", fmtTime(minutes)].join(" · ");
+    return `${episodes} ep. · ${fmtTime(minutes)}`;
+  }
+
+  function sortRowHtml(items) {
+    if (currentTab !== "plan" || items.length < 2) return "";
+    const mode = PLAN_SORTS.some(([k]) => k === prefs.planSort) ? prefs.planSort : "recent";
+    return `<div class="sort-row" role="group" aria-label="Ordina">${PLAN_SORTS.map(
+      ([k, label]) => `<button class="rank-chip${k === mode ? " active" : ""}" data-sort="${k}" aria-pressed="${k === mode}">${label}</button>`
+    ).join("")}</div>`;
+  }
+
+  // Voto e durata vengono dal database dell'app: se non è ancora caricato, si ridisegna appena arriva
+  let planDbAsked = false;
   function renderGrid() {
     renderHero();
     const grid = $("#grid");
-    const items = list
-      .filter((a) => a.status === currentTab)
-      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    let items = list.filter((a) => a.status === currentTab).sort(byRecent);
+    if (currentTab === "plan" && items.length && !db && !planDbAsked) {
+      planDbAsked = true;
+      loadDB()
+        .then(() => currentTab === "plan" && renderGrid())
+        .catch(() => (planDbAsked = false));
+    }
+    if (currentTab === "plan") items = sortPlan(items);
 
     if (!items.length) {
       const [ic, title, text] = {
@@ -498,7 +565,7 @@
       return;
     }
 
-    grid.innerHTML = items
+    grid.innerHTML = sortRowHtml(items) + items
       .map((a) => {
         let corner = "";
         let bar = "";
@@ -509,6 +576,8 @@
           if (a.episodes) bar = `<div class="bar"><i style="width:${pct(a)}%"></i></div>`;
         } else if (a.status === "done") {
           corner = `<span class="badge-done" aria-label="Visto">${icon("check")}</span>`;
+        } else if (a.status === "plan") {
+          sub = planSub(a) || sub;
         }
         // il tuo voto sotto il poster, al posto di tipo e anno (come su Letterboxd)
         const subHtml = a.status !== "watching" && a.rating ? starsSmall(a.rating) : esc(sub);
@@ -922,6 +991,17 @@
 
   $("#grid").addEventListener("click", (e) => {
     if (e.target.closest('[data-action="search"]')) return $("#addBtn").click();
+    const sortBtn = e.target.closest("[data-sort]");
+    if (sortBtn) {
+      if (!PLAN_SORTS.some(([k]) => k === sortBtn.dataset.sort)) return;
+      const keep = sortBtn.parentElement.scrollLeft; // la riga di chip resta dov'era
+      prefs.planSort = sortBtn.dataset.sort;
+      writeStore(PREFS_KEY, prefs);
+      renderGrid();
+      const row = $(".sort-row");
+      if (row) row.scrollLeft = keep;
+      return;
+    }
     const plus = e.target.closest("[data-plus]");
     if (plus) {
       e.stopPropagation();

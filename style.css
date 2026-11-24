@@ -305,6 +305,17 @@ a { color: inherit; }
   gap: 20px 12px;
   padding: 0 var(--gutter);
 }
+/* Da vedere: riga per ordinare (stessi chip delle Classifiche) */
+.sort-row {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  margin: 0 calc(-1 * var(--gutter)) -6px;
+  padding: 0 var(--gutter) 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.sort-row::-webkit-scrollbar { display: none; }
 @media (min-width: 700px) {
   .grid { grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 30px 18px; }
   .card .title { font-size: 14px; }
