@@ -8,6 +8,7 @@ const SHELL = [
   "fonts/archivo.woff2",
   "config.js",
   "sync-core.js",
+  "discover-core.js",
   "manifest.webmanifest",
   "icons/icon.svg",
   "icons/icon-180.png",

@@ -1180,6 +1180,47 @@ a { color: inherit; }
 .rank-note { margin: 0 0 8px; padding: 10px 12px; border-radius: var(--radius); background: var(--accent-soft); color: var(--accent); font-size: 13px; }
 .rank-panel .stats-note a { color: var(--text-2); }
 
+/* ---------- Scopri (filtri) ---------- */
+.disc-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.disc-open { flex: none; gap: 8px; }
+.disc-open .seg-n { margin-left: 2px; }
+.disc-sort { flex: 1; min-width: 0; margin: 0; padding: 0 var(--gutter) 0 0; }
+.disc-active { margin-bottom: 4px; }
+.rank-chip.tag { display: inline-flex; align-items: center; gap: 6px; padding: 0 10px 0 14px; border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.rank-chip.tag .ic { width: 14px; height: 14px; stroke-width: 2.4; }
+.rank-chip:disabled { opacity: 0.4; }
+.disc-count { margin: 6px 0 4px; color: var(--text-2); font-size: 13px; }
+.disc-none { padding: 8px 0 12px; }
+.disc-none .btn { margin-top: 10px; }
+.rank-panel .manual-btn { margin-top: 14px; }
+
+/* pannello dei filtri: intestazione e piede fissi, i gruppi scorrono in mezzo */
+.filter-panel {
+  display: flex;
+  flex-direction: column;
+  height: min(92dvh, 780px);
+  padding-bottom: 0;
+  overflow: hidden;
+}
+.filter-scroll { flex: 1; min-height: 0; margin: 0 calc(-1 * var(--gutter)); padding: 0 var(--gutter) 8px; overflow-y: auto; overscroll-behavior: contain; }
+.filt-group { margin-bottom: 20px; }
+.filt-group .eyebrow { margin: 0 0 10px; }
+.filt-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.filt-chips .rank-chip { height: 40px; padding: 0 16px; border-radius: 20px; }
+.filt-note { margin: 8px 0 0; color: var(--text-3); font-size: 12px; line-height: 1.45; }
+.filter-foot {
+  display: flex;
+  flex: none;
+  gap: 10px;
+  margin: 0 calc(-1 * var(--gutter));
+  padding: 12px var(--gutter) calc(14px + var(--safe-bottom));
+  border-top: 1px solid var(--line);
+  background: var(--bg-elev);
+}
+.filter-foot .btn { min-height: 46px; }
+.filter-foot .btn-primary { flex: 1; }
+.filter-foot .btn:disabled { opacity: 0.4; }
+
 /* ---------- Avvisi ---------- */
 .toast {
   position: fixed;

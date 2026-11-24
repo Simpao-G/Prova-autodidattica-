@@ -46,6 +46,7 @@
     <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.5"/><path d="M2.8 19.5c1-3.3 3.4-5 6.2-5s5.2 1.7 6.2 5M15.6 5.2a3.5 3.5 0 0 1 0 6.6M17.8 14.9c1.6.7 2.8 2.2 3.4 4.6"/></symbol>
     <symbol id="i-send" viewBox="0 0 24 24"><path d="M20.5 3.5 10.2 13.8M20.5 3.5 14 20.5l-3.8-6.7-6.7-3.8Z"/></symbol>
     <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m14.5 6-6 6 6 6"/></symbol>
+    <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4.5 7h15M7.5 12h9M10.5 17h3"/></symbol>
     <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M7.5 4h9v5.5a4.5 4.5 0 0 1-9 0Z"/><path d="M7.5 6H4.5a3 3 0 0 0 3.2 3.6M16.5 6h3a3 3 0 0 1-3.2 3.6M12 14v3.5M8.5 20.5h7M9.5 17.5h5"/></symbol>
   </svg>
 
@@ -108,6 +109,20 @@
         <button class="sheet-close" data-close aria-label="Chiudi"><svg class="ic" aria-hidden="true"><use href="#i-close"></use></svg></button>
       </div>
       <div id="rankBody"></div>
+    </div>
+  </section>
+
+  <!-- Filtri di Scopri (sopra le Classifiche, sotto la scheda anime che ci si apre sopra) -->
+  <section class="sheet" id="filterSheet" aria-hidden="true">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-panel filter-panel">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h2 class="display">Filtri</h2>
+        <button class="sheet-close" data-close aria-label="Chiudi"><svg class="ic" aria-hidden="true"><use href="#i-close"></use></svg></button>
+      </div>
+      <div class="filter-scroll" id="filterBody"></div>
+      <div class="filter-foot" id="filterFoot"></div>
     </div>
   </section>
 
@@ -179,6 +194,7 @@
 
   <script src="config.js"></script>
   <script src="sync-core.js"></script>
+  <script src="discover-core.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

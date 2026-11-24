@@ -173,7 +173,16 @@
         })
         .then((json) => {
           const P = json.coverPrefix || "";
-          const items = json.items.map(([al, mal, title, alt, type, year, eps, img, score, pop, isSeason, dur]) => ({
+          // colonne facoltative (le aggiunge build-db.mjs in coda): si leggono per nome, un indice più vecchio funziona lo stesso
+          const col = Object.fromEntries((json.fields || []).map((name, i) => [name, i]));
+          const opt = (row, name) => (col[name] === undefined ? null : row[col[name]]);
+          const items = json.items.map(([al, mal, title, alt, type, year, eps, img, score, pop, isSeason, dur], i) => ({
+            // campi con "_" davanti: servono solo ai filtri di Scopri e non vengono copiati nella lista dell'utente (vedi setStatus)
+            _score: score || 0,
+            _pop: pop || 0,
+            _genres: opt(json.items[i], "genres"),
+            _status: opt(json.items[i], "status"),
+            _start: opt(json.items[i], "start"),
             id: mal ? "mal-" + mal : "al-" + al,
             alId: al,
             malId: mal || null,
@@ -196,7 +205,16 @@
             byId: new Map(items.map((i) => [i.id, i])),
             shards: json.shards || 64,
             updated: json.updated,
+            genreNames: json.genreNames || [],
+            statusNames: json.statusNames || [],
+            // cosa sa filtrare questo database: i gruppi mancanti non si mostrano (o si mostrano spenti)
+            caps: {
+              genres: col.genres !== undefined && Array.isArray(json.genreNames),
+              status: col.status !== undefined && Array.isArray(json.statusNames),
+              start: col.start !== undefined,
+            },
           };
+          db.caps.genreNames = db.genreNames;
           return db;
         })
         .catch((err) => {
@@ -826,7 +844,7 @@
     renderGrid();
     if ($("#detailSheet").classList.contains("open")) renderDetail();
     // classifiche aperte sotto la scheda: lo stato degli anime appena aggiunti si vede subito
-    if (rankings && $("#rankSheet").classList.contains("open")) renderRankings();
+    if ((rankings || rank.tab === "discover") && $("#rankSheet").classList.contains("open")) renderRankings();
   }
 
   // ---------- Pannelli ----------
@@ -839,6 +857,7 @@
     const s = $(sel);
     s.classList.remove("open");
     s.setAttribute("aria-hidden", "true");
+    if (sel === "#filterSheet") onFiltersClosed();
   }
   document.querySelectorAll(".sheet").forEach((sheet) => {
     sheet.addEventListener("click", (e) => {
@@ -2295,10 +2314,12 @@
   // data/rankings.json lo prepara ogni lunedì scripts/build-rankings.mjs: per ogni anime il voto è la
   // media tra AniList e la media dei siti (MyAnimeList, Kitsu, AniDB...) del database manami-project.
   // items[id] = [alId, malId, titolo, tipo, anno, episodi, copertina, voto, AniList, mediaSiti]
+  const Discover = window.AnimetecaDiscover; // discover-core.js: la logica dei filtri di Scopri
   const RANK_TABS = [
     ["top", "Migliori"],
     ["genres", "Generi"],
     ["year", "Anno"],
+    ...(Discover ? [["discover", "Scopri"]] : []),
   ];
   const rank = { tab: "top", genre: null, year: null };
   let rankings = null;
@@ -2337,6 +2358,10 @@
       </button>`;
   }
 
+  const rankSeg = () => `<div class="seg" role="tablist">${RANK_TABS.map(
+    ([k, label]) => `<button role="tab" class="seg-btn${rank.tab === k ? " active" : ""}" data-rtab="${k}" aria-selected="${rank.tab === k}">${label}</button>`
+  ).join("")}</div>`;
+
   function renderRankings() {
     const box = $("#rankBody");
     const r = rankings;
@@ -2344,12 +2369,22 @@
     const oldStrip = box.querySelector(".rank-chips");
     const keepScroll = oldStrip && box.dataset.tab === rank.tab ? oldStrip.scrollLeft : 0;
     box.dataset.tab = rank.tab;
+    // Scopri non dipende da rankings.json: usa solo il database dell'app
+    if (rank.tab === "discover" && Discover) {
+      box.innerHTML = rankSeg() + discoverHtml();
+      const strip = box.querySelector(".disc-active");
+      if (strip && keepScroll) strip.scrollLeft = keepScroll;
+      return;
+    }
     if (!r) {
-      box.innerHTML = emptyComm(
-        "trophy",
-        "Classifiche in arrivo",
-        "Le classifiche arrivano con il prossimo aggiornamento del database, che si fa da solo ogni lunedì."
-      );
+      // la riga delle schede resta, così Scopri è raggiungibile anche senza classifiche
+      box.innerHTML =
+        (Discover ? rankSeg() : "") +
+        emptyComm(
+          "trophy",
+          "Classifiche in arrivo",
+          "Le classifiche arrivano con il prossimo aggiornamento del database, che si fa da solo ogni lunedì."
+        );
       return;
     }
     let chips = "";
@@ -2368,9 +2403,7 @@
       chips = years.map((y) => `<button class="rank-chip${y === rank.year ? " active" : ""}" data-year="${y}">${y}</button>`).join("");
       ids = r.years[rank.year] || [];
     }
-    box.innerHTML = `<div class="seg" role="tablist">${RANK_TABS.map(
-      ([k, label]) => `<button role="tab" class="seg-btn${rank.tab === k ? " active" : ""}" data-rtab="${k}" aria-selected="${rank.tab === k}">${label}</button>`
-    ).join("")}</div>
+    box.innerHTML = `${rankSeg()}
       ${chips ? `<div class="rank-chips">${chips}</div>` : ""}
       ${r.sources.sites ? "" : `<p class="rank-note">Questa settimana solo AniList: la media degli altri siti non era disponibile.</p>`}
       <div class="rank-list">${ids.length ? ids.map((id, i) => rankRow(id, i + 1)).join("") : `<p class="hint">Nessun titolo qui.</p>`}</div>
@@ -2400,6 +2433,7 @@
 
   $("#rankBtn").addEventListener("click", async () => {
     openSheet("#rankSheet");
+    loadDB().catch(() => {}); // il database serve a Scopri e al primo tocco su una riga: meglio caricarlo subito
     if (!rankings) {
       $("#rankBody").innerHTML = spinner;
       await loadRankings();
@@ -2411,10 +2445,12 @@
     const tab = e.target.closest("[data-rtab]");
     if (tab) {
       rank.tab = tab.dataset.rtab;
+      disc.shown = DISC_PAGE;
       renderRankings();
       $("#rankSheet .sheet-panel").scrollTop = 0;
       return;
     }
+    if (discoverClick(e)) return;
     const genre = e.target.closest("[data-genre]");
     if (genre) {
       rank.genre = genre.dataset.genre;
@@ -2427,6 +2463,190 @@
     }
     const row = e.target.closest("[data-rid]");
     if (row) openRanked(row.dataset.rid);
+  });
+
+  // ---------- Scopri: ricerca con filtri ----------
+  // La logica (filtri, ordine, chip attivi) sta in discover-core.js e si prova con node --test.
+  // Qui ci sono solo l'interfaccia e il salvataggio delle scelte (prefs.discover, solo su questo dispositivo).
+  const DISC_PAGE = 50;
+  const disc = { f: null, shown: DISC_PAGE, loading: false, failed: false, dirty: false };
+
+  const discFilters = () => disc.f || (disc.f = Discover.normalize(prefs.discover, db.caps));
+  function discSave() {
+    prefs.discover = disc.f;
+    writeStore(PREFS_KEY, prefs);
+  }
+  const discOpts = () => ({ genreNames: db.genreNames, statusNames: db.statusNames, mine: new Set(list.map((a) => a.id)) });
+  const discFound = (f) => Discover.filterAnime(db.items, f, discOpts());
+  const discGenres = () => [...db.genreNames].sort((a, b) => genreLabel(a).localeCompare(genreLabel(b), "it"));
+  const statusLabel = (a) => {
+    const key = a._status >= 0 ? db.statusNames[a._status] : "";
+    return (Discover.STATUSES.find(([k]) => k === key) || [])[1] || "";
+  };
+  const num = (n) => n.toLocaleString("it-IT");
+  // i valori arrivano dagli attributi data-*: il voto minimo è un numero, gli interruttori non hanno valore
+  const discValue = (group, v) => (group === "score" ? Number(v) : v);
+
+  function discRow(a) {
+    const mine = findItem(a.id);
+    const sub = [a.type, a.year, a.episodes && `${a.episodes} ep.`].filter(Boolean).join(" · ");
+    const st = statusLabel(a);
+    return `<button class="rank-row" data-did="${a.alId}">
+        <img src="${esc(cover(a))}" data-t="${esc(a.title)}" alt="" loading="lazy">
+        <span class="r-main"><span class="r-title">${esc(a.title)}</span><span class="r-sub">${esc(sub)}</span>${st ? `<span class="rank-src">${esc(st)}</span>` : ""}</span>
+        <span class="rank-side">${a._score ? `<b class="rank-score">${oneDecimal(a._score / 10)}</b>` : ""}${mine ? `<span class="r-tag">${esc(STATUS[mine.status])}</span>` : ""}</span>
+      </button>`;
+  }
+
+  function discoverHtml() {
+    if (!db) {
+      // database non ancora caricato: si carica adesso e la scheda si ridisegna appena arriva
+      if (!disc.loading && !disc.failed) {
+        disc.loading = true;
+        loadDB()
+          .then(() => (disc.failed = false))
+          .catch(() => (disc.failed = true))
+          .finally(() => {
+            disc.loading = false;
+            if (rank.tab === "discover" && $("#rankSheet").classList.contains("open")) renderRankings();
+          });
+      }
+      if (!disc.failed) return spinner;
+      return emptyComm(
+        "search",
+        "Database non disponibile",
+        navigator.onLine === false
+          ? "Sei offline e il database degli anime non è ancora salvato su questo dispositivo: collegati a internet almeno una volta."
+          : "Non riesco a caricare il database degli anime. Riprova tra poco.",
+        `<button class="btn btn-ghost" data-dretry>Riprova</button>`
+      );
+    }
+    const f = discFilters();
+    const active = Discover.activeFilters(f, { genreLabel });
+    const results = Discover.sortAnime(discFound(f), f.sort);
+    const shown = results.slice(0, disc.shown);
+    const chips = active
+      .map(
+        (c) => `<button class="rank-chip tag" data-dremove="${c.group}" data-dval="${esc(c.value)}" aria-label="Togli il filtro ${esc(c.label)}">${esc(c.label)}${icon("close")}</button>`
+      )
+      .join("");
+    return `<div class="disc-bar">
+        <button class="btn btn-ghost disc-open" data-dopen>${icon("filter")}Filtri${active.length ? `<b class="seg-n">${active.length}</b>` : ""}</button>
+        <div class="rank-chips disc-sort" role="group" aria-label="Ordina per">${Discover.SORTS.map(
+          ([k, label]) => `<button class="rank-chip${f.sort === k ? " active" : ""}" data-dsort="${k}" aria-pressed="${f.sort === k}">${label}</button>`
+        ).join("")}</div>
+      </div>
+      ${active.length ? `<div class="rank-chips disc-active">${chips}<button class="rank-chip" data-dreset>Azzera</button></div>` : ""}
+      <p class="disc-count tnum" aria-live="polite">${num(results.length)} anime${active.length ? " con questi filtri" : ""}</p>
+      <div class="rank-list">${
+        shown.length
+          ? shown.map(discRow).join("")
+          : `<div class="disc-none"><p class="hint">Nessun anime con questi filtri.</p>${active.length ? `<button class="btn btn-ghost" data-dreset>Azzera i filtri</button>` : ""}</div>`
+      }</div>
+      ${results.length > shown.length ? `<button class="manual-btn" data-dmore>${icon("plus")}Mostra altri ${Math.min(DISC_PAGE, results.length - shown.length)}</button>` : ""}
+      <p class="stats-note">Voto AniList e popolarità dal database dell'app${db.updated ? `, aggiornato il ${dayIt(db.updated)}` : ""}. Un anime senza un dato (per esempio senza voto) non compare se quel filtro è attivo.</p>`;
+  }
+
+  // Tocchi nella scheda Scopri; restituisce true se il tocco era suo
+  function discoverClick(e) {
+    const t = e.target;
+    if (t.closest("[data-dretry]")) {
+      disc.failed = false;
+      renderRankings();
+      return true;
+    }
+    if (!db || !Discover) return false;
+    const change = (next) => {
+      disc.f = next;
+      discSave();
+      disc.shown = DISC_PAGE;
+      renderRankings();
+    };
+    if (t.closest("[data-dopen]")) {
+      openFilters();
+      return true;
+    }
+    const sort = t.closest("[data-dsort]");
+    if (sort) return change(Discover.toggle(discFilters(), "sort", sort.dataset.dsort, db.caps)), true;
+    const rem = t.closest("[data-dremove]");
+    if (rem) return change(Discover.toggle(discFilters(), rem.dataset.dremove, discValue(rem.dataset.dremove, rem.dataset.dval), db.caps)), true;
+    if (t.closest("[data-dreset]")) return change(Discover.clear(discFilters())), true;
+    if (t.closest("[data-dmore]")) {
+      disc.shown += DISC_PAGE;
+      renderRankings();
+      return true;
+    }
+    const row = t.closest("[data-did]");
+    if (row) {
+      const a = db.byAl.get(Number(row.dataset.did));
+      if (a) showDetail(a);
+      return true;
+    }
+    return false;
+  }
+
+  // ----- Pannello Filtri (sheet): ogni tocco aggiorna subito i chip e il numero di risultati;
+  // l'elenco dietro si ridisegna quando il pannello si chiude, così le copertine non si ricaricano a ogni tocco
+  function renderFilters() {
+    const f = discFilters();
+    const caps = db.caps;
+    const chip = (group, value, label, on, off = false) =>
+      `<button class="rank-chip filt${on ? " active" : ""}" data-fgroup="${group}" data-fval="${esc(value)}" aria-pressed="${on}"${off ? " disabled" : ""}>${esc(label)}</button>`;
+    const section = (title, chips, note = "") =>
+      `<section class="filt-group"><p class="eyebrow">${title}</p><div class="filt-chips">${chips}</div>${note ? `<p class="filt-note">${note}</p>` : ""}</section>`;
+    let html = section("Formato", Discover.FORMATS.map((x) => chip("formats", x, x, f.formats.includes(x))).join(""));
+    html += section("Anno di uscita", Discover.YEARS.map(([k, label]) => chip("year", k, label, f.year === k)).join(""));
+    html += section("Numero di episodi", Discover.EPISODES.map(([k, label]) => chip("episodes", k, label, f.episodes === k)).join(""));
+    html += section("Voto minimo", Discover.SCORES.map(([k, label]) => chip("score", k, label.replace("Voto ", ""), f.score === k)).join(""), "Voto AniList.");
+    if (caps.genres) {
+      html += section("Generi", discGenres().map((g) => chip("genres", g, genreLabel(g), f.genres.includes(g))).join(""), "Se ne scegli più di uno, l'anime deve averli tutti.");
+    }
+    html += section(
+      "Stato",
+      Discover.STATUSES.map(([k, label]) => chip("status", k, label, f.status.includes(k), !caps.status)).join(""),
+      caps.status ? "" : "Disponibile dopo il prossimo aggiornamento del database."
+    );
+    html += section("Notorietà", Discover.FAME.map(([k, label]) => chip("fame", k, label, f.fame === k)).join(""), "Noti: almeno 10.000 utenti AniList. Molto noti: almeno 100.000.");
+    if (caps.start) html += section("Serie", chip("starts", "1", "Solo inizi di serie", f.starts), "Nasconde le stagioni successive e i seguiti.");
+    html += section("La mia lista", chip("hideMine", "1", "Nascondi quelli già nella mia lista", f.hideMine));
+    $("#filterBody").innerHTML = html;
+    const n = discFound(f).length;
+    const any = Discover.activeFilters(f).length > 0;
+    $("#filterFoot").innerHTML = `<button class="btn btn-ghost" data-freset${any ? "" : " disabled"}>Azzera</button>
+      <button class="btn btn-primary" data-fdone>${n ? `Mostra ${num(n)} anime` : "Nessun risultato"}</button>`;
+  }
+
+  function openFilters() {
+    renderFilters();
+    openSheet("#filterSheet");
+    $("#filterBody").scrollTop = 0;
+  }
+
+  // chiamata da closeSheet quando il pannello Filtri si chiude (anche con Esc o toccando fuori)
+  function onFiltersClosed() {
+    if (!disc.dirty) return;
+    disc.dirty = false;
+    disc.shown = DISC_PAGE;
+    if (rank.tab === "discover" && $("#rankSheet").classList.contains("open")) renderRankings();
+  }
+
+  $("#filterSheet").addEventListener("click", (e) => {
+    if (!db || !Discover) return;
+    const body = $("#filterBody");
+    const keep = body.scrollTop;
+    const chip = e.target.closest("[data-fgroup]");
+    if (chip && !chip.disabled) {
+      disc.f = Discover.toggle(discFilters(), chip.dataset.fgroup, discValue(chip.dataset.fgroup, chip.dataset.fval), db.caps);
+    } else if (e.target.closest("[data-freset]")) {
+      disc.f = Discover.clear(discFilters());
+    } else {
+      if (e.target.closest("[data-fdone]")) closeSheet("#filterSheet");
+      return;
+    }
+    discSave();
+    disc.dirty = true;
+    renderFilters();
+    body.scrollTop = keep;
   });
 
   // ---------- Backup ----------

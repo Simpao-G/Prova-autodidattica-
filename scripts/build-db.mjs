@@ -8,6 +8,8 @@
 //                     (l'italiano lo aggiunge scripts/translate.py)
 
 import { mkdir, writeFile, rm, readFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
+import { GENRES } from "./rankings-core.mjs";
 
 const API = "https://graphql.anilist.co";
 const OUT = new URL("../data/", import.meta.url);
@@ -18,6 +20,28 @@ const MAX_ITEMS = Number(process.env.MAX_ITEMS ?? Infinity); // solo per prove
 
 const TYPE = { TV: "TV", TV_SHORT: "TV", ONA: "ONA", MOVIE: "Film", OVA: "OVA", SPECIAL: "Special" };
 const SEASON_TYPES = new Set(["TV", "TV_SHORT", "ONA"]);
+// Stato di uscita di AniList: nell'indice si salva la posizione in questo elenco (-1 = non noto)
+export const STATUS_NAMES = ["FINISHED", "RELEASING", "NOT_YET_RELEASED", "CANCELLED", "HIATUS"];
+
+// Generi -> numero con un bit per genere, nell'ordine di GENRES (rankings-core.mjs).
+// Così l'app filtra per genere senza scaricare i blocchi dei dettagli.
+export function genreMask(genres) {
+  let mask = 0;
+  for (const g of genres || []) {
+    const i = GENRES.indexOf(g);
+    if (i >= 0) mask |= 1 << i;
+  }
+  return mask;
+}
+
+// 1 se l'anime è l'inizio della sua serie: senza serie intorno, oppure la prima stagione (TV/ONA) della catena;
+// se la catena non ha stagioni, il primo in assoluto. Un OVA o uno special uscito prima non "ruba" il titolo.
+// `group` è la catena ordinata per data (vedi buildSeasons), `isSeason(id)` dice se un anime è una stagione.
+export function seriesStart(id, group, isSeason) {
+  if (!group || group.length < 2) return 1;
+  const first = group.find((x) => isSeason(x)) ?? group[0];
+  return first === id ? 1 : 0;
+}
 
 // AniList limita ogni ricerca a ~5000 risultati: scarichiamo un anno di uscita alla volta
 const QUERY = `query ($page: Int, $perPage: Int, $from: FuzzyDateInt, $to: FuzzyDateInt) {
@@ -29,7 +53,7 @@ const QUERY = `query ($page: Int, $perPage: Int, $from: FuzzyDateInt, $to: Fuzzy
       coverImage { large }
       description(asHtml: false)
       episodes duration seasonYear startDate { year month day }
-      format averageScore popularity genres
+      format status averageScore popularity genres
       relations { edges { relationType node { id type } } }
     }
   }
@@ -120,6 +144,8 @@ export function buildSeasons(all) {
 
 export function build(all, oldTranslations = new Map()) {
   const seasons = buildSeasons(all);
+  const byId = new Map(all.map((m) => [m.id, m]));
+  const isSeason = (id) => SEASON_TYPES.has(byId.get(id)?.format);
   const items = all
     .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
     .map((m) => {
@@ -140,6 +166,9 @@ export function build(all, oldTranslations = new Map()) {
         m.popularity || 0,
         SEASON_TYPES.has(m.format) ? 1 : 0,
         m.duration || 0,
+        genreMask(m.genres),
+        STATUS_NAMES.indexOf(m.status),
+        seriesStart(m.id, seasons.get(m.id), isSeason),
       ];
     });
 
@@ -158,7 +187,9 @@ export function build(all, oldTranslations = new Map()) {
       updated: new Date().toISOString().slice(0, 10),
       coverPrefix: COVER_PREFIX,
       shards: SHARDS,
-      fields: ["anilistId", "malId", "title", "altTitle", "type", "year", "episodes", "cover", "score", "popularity", "isSeason", "duration"],
+      fields: ["anilistId", "malId", "title", "altTitle", "type", "year", "episodes", "cover", "score", "popularity", "isSeason", "duration", "genres", "status", "start"],
+      genreNames: GENRES,
+      statusNames: STATUS_NAMES,
       items,
     },
     shards,
@@ -225,7 +256,7 @@ async function main() {
   console.log(`Fatto: ${index.items.length} anime salvati.`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((err) => {
     console.error(err);
     process.exit(1);
